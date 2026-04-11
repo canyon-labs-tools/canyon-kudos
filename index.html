@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Canyon Kudos — Employee Recognition</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700;900&family=PT+Sans:wght@400;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --canyon-navy: #272E72;
+      --canyon-purple: #5F295E;
+      --canyon-blue: #5F295E;
+      --canyon-blue-light: #7a3578;
+      --canyon-red: #9D2235;
+      --canyon-gold: #D14124;
+      --canyon-dark: #191919;
+      --canyon-bg: #f1f5f9;
+      --canyon-card: #ffffff;
+      --canyon-text: #191919;
+      --canyon-muted: #64748b;
+      --radius: 12px;
+    }
+    body { font-family: 'PT Sans', 'Arial', sans-serif; background: var(--canyon-bg); color: var(--canyon-text); min-height: 100vh; }
+    h1, h2, h3, h4, .page-title, .nav-logo, .stat-number, .rec-recipient { font-family: 'Titillium Web', 'Arial Black', sans-serif; }
+    #root { min-height: 100vh; }
+
+    /* Value colors */
+    .value-innovation { --accent: #8b5cf6; --accent-bg: #ede9fe; }
+    .value-integrity { --accent: #0891b2; --accent-bg: #cffafe; }
+    .value-hard-work { --accent: #dc2626; --accent-bg: #fee2e2; }
+    .value-teamwork { --accent: #16a34a; --accent-bg: #dcfce7; }
+    .value-passion { --accent: #ea580c; --accent-bg: #fff7ed; }
+
+    /* Nav */
+    .nav { background: var(--canyon-navy); color: white; padding: 0 24px; display: flex; align-items: center; height: 72px; gap: 32px; }
+    .nav-logo { font-weight: 800; font-size: 20px; letter-spacing: -0.5px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .nav-logo img { height: 40px; width: auto; }
+    .nav-logo .tagline { font-size: 8px; font-weight: 400; letter-spacing: 2px; text-transform: uppercase; color: rgba(255,255,255,0.5); font-family: 'PT Sans', sans-serif; }
+    .nav-links { display: flex; gap: 4px; }
+    .nav-link { color: rgba(255,255,255,0.7); text-decoration: none; padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; border: none; background: none; transition: all 0.15s; }
+    .nav-link:hover, .nav-link.active { color: white; background: rgba(255,255,255,0.12); }
+
+    /* Layout */
+    .page { max-width: 720px; margin: 0 auto; padding: 40px 24px; }
+    .page-wide { max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
+    .page-title { font-size: 28px; font-weight: 800; margin-bottom: 8px; letter-spacing: -0.5px; }
+    .page-subtitle { color: var(--canyon-muted); font-size: 15px; margin-bottom: 32px; }
+
+    /* Card */
+    .card { background: var(--canyon-card); border-radius: var(--radius); box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04); padding: 28px; }
+
+    /* Form */
+    .form-group { margin-bottom: 20px; }
+    .form-label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 6px; color: var(--canyon-text); }
+    .form-input, .form-select, .form-textarea { width: 100%; padding: 10px 14px; border: 1.5px solid #e2e8f0; border-radius: 8px; font-size: 15px; font-family: inherit; transition: border-color 0.15s; background: white; }
+    .form-input:focus, .form-select:focus, .form-textarea:focus { outline: none; border-color: var(--canyon-purple); box-shadow: 0 0 0 3px rgba(95,41,94,0.12); }
+    .form-textarea { min-height: 100px; resize: vertical; }
+
+    /* Value pills (radio group) */
+    .value-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+    .value-pill { display: flex; align-items: center; gap: 6px; padding: 8px 16px; border: 2px solid #e2e8f0; border-radius: 99px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; background: white; }
+    .value-pill:hover { border-color: #cbd5e1; }
+    .value-pill.selected { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
+    .value-pill input { display: none; }
+
+    /* Buttons */
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 20px; border-radius: 8px; font-size: 15px; font-weight: 600; font-family: inherit; cursor: pointer; border: none; transition: all 0.15s; }
+    .btn-primary { background: var(--canyon-blue); color: white; }
+    .btn-primary:hover { background: var(--canyon-blue-light); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-secondary { background: #e2e8f0; color: var(--canyon-text); }
+    .btn-secondary:hover { background: #cbd5e1; }
+    .btn-gold { background: var(--canyon-gold); color: white; }
+    .btn-gold:hover { background: #b8371e; }
+    .btn-sm { padding: 6px 14px; font-size: 13px; }
+    .btn-block { width: 100%; }
+
+    /* Success message */
+    .success-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 100; animation: fadeIn 0.2s; }
+    .success-card { background: white; border-radius: 16px; padding: 48px; text-align: center; max-width: 420px; animation: popIn 0.3s; }
+    .success-icon { width: 64px; height: 64px; background: #dcfce7; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; }
+    .success-card h2 { font-size: 22px; margin-bottom: 8px; }
+    .success-card p { color: var(--canyon-muted); margin-bottom: 24px; }
+
+    /* Recognition card (feed & TV) */
+    .rec-card { background: white; border-radius: var(--radius); box-shadow: 0 1px 3px rgba(0,0,0,0.06); padding: 20px 24px; border-left: 4px solid var(--accent); transition: all 0.2s; }
+    .rec-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+    .rec-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .rec-recipient { font-size: 18px; font-weight: 700; }
+    .rec-badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 99px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; background: var(--accent-bg); color: var(--accent); }
+    .rec-body { color: #475569; font-size: 15px; line-height: 1.6; margin-bottom: 10px; }
+    .rec-footer { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--canyon-muted); }
+    .rec-list { display: flex; flex-direction: column; gap: 16px; }
+
+    /* TV Display */
+    .tv-container { position: fixed; inset: 0; background: linear-gradient(135deg, #1a2260 0%, #4a2252 35%, #7d1e35 70%, #a83520 100%); overflow: hidden; }
+    .tv-header { padding: 32px 48px; display: flex; align-items: center; justify-content: space-between; }
+    .tv-logo { color: white; font-size: 28px; font-weight: 800; display: flex; align-items: center; gap: 12px; }
+    .tv-subtitle { color: rgba(255,255,255,0.5); font-size: 14px; }
+    .tv-slide { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 80%; max-width: 900px; }
+    .tv-card { background: rgba(255,255,255,0.07); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.1); border-radius: 24px; padding: 56px 64px; text-align: center; animation: slideUp 0.6s cubic-bezier(0.16,1,0.3,1); }
+    .tv-value-icon { width: 72px; height: 72px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; font-size: 32px; }
+    .tv-card .rec-recipient { color: white; font-size: 36px; margin-bottom: 8px; }
+    .tv-card .rec-badge { font-size: 14px; padding: 6px 18px; margin-bottom: 24px; }
+    .tv-card .rec-body { color: rgba(255,255,255,0.8); font-size: 20px; line-height: 1.7; max-width: 700px; margin: 0 auto 24px; }
+    .tv-card .rec-footer { justify-content: center; color: rgba(255,255,255,0.4); font-size: 15px; }
+    .tv-dots { position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; }
+    .tv-dot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,0.2); transition: all 0.3s; }
+    .tv-dot.active { background: var(--canyon-gold); width: 28px; border-radius: 5px; }
+    .tv-empty { color: rgba(255,255,255,0.4); font-size: 22px; text-align: center; position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); }
+
+    /* Admin */
+    .admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    @media (max-width: 768px) { .admin-grid { grid-template-columns: 1fr; } }
+    .stat-card { background: white; border-radius: var(--radius); padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+    .stat-number { font-size: 36px; font-weight: 900; color: var(--canyon-navy); }
+    .stat-label { color: var(--canyon-muted); font-size: 14px; font-weight: 500; margin-top: 4px; }
+
+    /* Drawing - Fullscreen Roulette */
+    .roulette-fullscreen { position: fixed; inset: 0; z-index: 200; background: linear-gradient(135deg, #1a2260 0%, #4a2252 35%, #3d1a3d 70%, #1a2260 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; animation: fadeIn 0.3s; }
+    .roulette-fullscreen .roulette-header { position: absolute; top: 24px; left: 32px; display: flex; align-items: center; gap: 12px; }
+    .roulette-fullscreen .roulette-header h2 { color: white; font-size: 22px; font-weight: 800; }
+    .roulette-fullscreen .roulette-header span { color: rgba(255,255,255,0.4); font-size: 14px; }
+    .roulette-close { position: absolute; top: 24px; right: 32px; background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.6); border: none; border-radius: 8px; padding: 8px 16px; cursor: pointer; font-size: 13px; font-family: inherit; }
+    .roulette-close:hover { background: rgba(255,255,255,0.2); color: white; }
+    .roulette-wheel-wrap { position: relative; display: flex; align-items: center; justify-content: center; }
+    .roulette-pointer { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); z-index: 10; width: 0; height: 0; border-left: 16px solid transparent; border-right: 16px solid transparent; border-top: 36px solid #D14124; filter: drop-shadow(0 4px 12px rgba(232,77,26,0.5)); }
+    .roulette-pointer::after { content: ''; position: absolute; top: -40px; left: -8px; width: 16px; height: 16px; background: #D14124; border-radius: 50%; }
+    .roulette-center { position: absolute; width: 90px; height: 90px; border-radius: 50%; background: radial-gradient(circle, #272E72 60%, #1a2260); border: 3px solid rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; z-index: 5; box-shadow: 0 0 30px rgba(0,0,0,0.5); }
+    .roulette-spin-btn { width: 80px; height: 80px; border-radius: 50%; border: none; background: linear-gradient(135deg, #D14124, #d14124); color: white; font-size: 13px; font-weight: 800; font-family: inherit; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; transition: all 0.2s; box-shadow: 0 4px 20px rgba(232,77,26,0.4); }
+    .roulette-spin-btn:hover { transform: scale(1.05); box-shadow: 0 6px 30px rgba(232,77,26,0.6); }
+    .roulette-spin-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .roulette-winner-overlay { position: fixed; inset: 0; z-index: 210; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; animation: fadeIn 0.3s; }
+    .roulette-winner-card { text-align: center; animation: popIn 0.5s cubic-bezier(0.16,1,0.3,1); }
+    .roulette-winner-card h1 { color: #D14124; font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: 3px; margin-bottom: 12px; }
+    .roulette-winner-card .winner-name { color: white; font-size: 56px; font-weight: 900; margin-bottom: 8px; text-shadow: 0 0 40px rgba(232,77,26,0.3); }
+    .roulette-winner-card .winner-value { display: inline-block; padding: 8px 24px; border-radius: 99px; font-size: 16px; font-weight: 700; background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.8); margin-bottom: 32px; }
+    .roulette-winner-card .winner-confetti { font-size: 48px; margin-bottom: 16px; }
+    .roulette-info { position: absolute; bottom: 32px; color: rgba(255,255,255,0.3); font-size: 13px; text-align: center; }
+
+    /* Print styles */
+    .print-card { border: 2px solid #e2e8f0; border-radius: 12px; padding: 32px; margin-bottom: 24px; page-break-inside: avoid; border-left: 6px solid var(--accent); }
+    .print-card .rec-recipient { font-size: 22px; }
+    .print-card .print-logo { font-weight: 800; font-size: 14px; color: var(--canyon-muted); margin-bottom: 16px; }
+
+    /* Animations */
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes popIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+    @keyframes slideUp { from { opacity: 0; transform: translate(-50%, -45%); } to { opacity: 1; transform: translate(-50%, -50%); } }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(1080deg); } }
+    @keyframes scrollNames { 0% { transform: translateY(0); } 100% { transform: translateY(-100%); } }
+    @keyframes confetti { 0% { transform: translateY(0) rotate(0); opacity: 1; } 100% { transform: translateY(-200px) rotate(720deg); opacity: 0; } }
+
+    /* Print media */
+    @media print {
+      .nav, .no-print { display: none !important; }
+      body { background: white; }
+      .print-card { box-shadow: none; border: 2px solid #ccc; }
+    }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+      .nav { padding: 0 16px; gap: 16px; }
+      .nav-link { padding: 6px 10px; font-size: 13px; }
+      .page, .page-wide { padding: 24px 16px; }
+      .value-pills { gap: 6px; }
+      .value-pill { padding: 6px 12px; font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useCallback, useRef } = React;
+
+    // ─── Supabase Client ────────────────────────────────────
+    const SUPABASE_URL = 'https://vnoaofrvtaallrbiggob.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZub2FvZnJ2dGFhbGxyYmlnZ29iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0Mzc3MjgsImV4cCI6MjA4OTAxMzcyOH0.T0VJH25VmTPLNfUQ1rCYrLI4vCEJLh2lABj_9l6_Cms';
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // ─── Constants ──────────────────────────────────────────
+    const CORE_VALUES = ['Innovation', 'Integrity', 'Hard Work', 'Teamwork', 'Passion'];
+    const VALUE_ICONS = {
+      'Innovation': '💡', 'Integrity': '🛡️', 'Hard Work': '🔥',
+      'Teamwork': '🤝', 'Passion': '❤️'
+    };
+    const VALUE_CLASS = v => 'value-' + v.toLowerCase().replace(' ', '-');
+
+    // ─── Helper: relative time ──────────────────────────────
+    function timeAgo(date) {
+      const s = Math.floor((Date.now() - new Date(date)) / 1000);
+      if (s < 60) return 'just now';
+      if (s < 3600) return Math.floor(s/60) + 'm ago';
+      if (s < 86400) return Math.floor(s/3600) + 'h ago';
+      if (s < 604800) return Math.floor(s/86400) + 'd ago';
+      return new Date(date).toLocaleDateString();
+    }
+
+    function currentQuarter() {
+      const d = new Date();
+      return d.getFullYear() + '-Q' + (Math.floor(d.getMonth()/3)+1);
+    }
+
+    // ─── Canyon Labs Logo (actual brand asset) ────────────────
+    function CanyonLogo({ height = 28, variant = 'color' }) {
+      const src = variant === 'white' ? 'canyon-labs-logo-white.png' : 'canyon-labs-logo.png';
+      return <img src={src} alt="Canyon Labs" style={{ height, width: 'auto' }} />;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // NAVIGATION
+    // ═══════════════════════════════════════════════════════════
+    function Nav({ page, setPage }) {
+      return (
+        <nav className="nav no-print">
+          <div className="nav-logo">
+            <CanyonLogo height={40} variant="white" />
+            <span className="tagline">Raising the Standard</span>
+          </div>
+          <div className="nav-links">
+            <button className={`nav-link ${page==='submit'?'active':''}`} onClick={()=>setPage('submit')}>Give Recognition</button>
+            <button className={`nav-link ${page==='feed'?'active':''}`} onClick={()=>setPage('feed')}>Feed</button>
+            <button className={`nav-link ${page==='tv'?'active':''}`} onClick={()=>setPage('tv')}>TV Display</button>
+            <button className={`nav-link ${page==='admin'?'active':''}`} onClick={()=>setPage('admin')}>Admin</button>
+          </div>
+        </nav>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // SUBMIT RECOGNITION
+    // ═══════════════════════════════════════════════════════════
+    function SubmitPage({ sites }) {
+      const [form, setForm] = useState({ recipient: '', nominator: '', value: '', description: '', siteId: '' });
+      const [submitting, setSubmitting] = useState(false);
+      const [success, setSuccess] = useState(false);
+      const [anonymous, setAnonymous] = useState(false);
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!form.recipient || (!anonymous && !form.nominator) || !form.value || !form.description || !form.siteId) return;
+        setSubmitting(true);
+        const { error } = await supabase.from('recognitions').insert({
+          recipient_name: form.recipient.trim(),
+          nominator_name: anonymous ? 'Anonymous' : form.nominator.trim(),
+          core_value: form.value,
+          description: form.description.trim(),
+          site_id: form.siteId
+        });
+        setSubmitting(false);
+        if (!error) {
+          setSuccess(true);
+          setForm({ recipient: '', nominator: '', value: '', description: '', siteId: form.siteId });
+        }
+      };
+
+      return (
+        <div className="page">
+          <h1 className="page-title">Recognize a Colleague</h1>
+          <p className="page-subtitle">Celebrate someone who embodies our core values.</p>
+
+          <form className="card" onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label className="form-label">Who are you recognizing?</label>
+              <input className="form-input" placeholder="Recipient's full name" value={form.recipient}
+                onChange={e => setForm({...form, recipient: e.target.value})} />
+            </div>
+
+            <div className="form-group">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <label className="form-label" style={{ margin: 0 }}>Your name</label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--canyon-muted)', cursor: 'pointer', userSelect: 'none' }}>
+                  <input type="checkbox" checked={anonymous} onChange={e => { setAnonymous(e.target.checked); if (e.target.checked) setForm({...form, nominator: ''}); }}
+                    style={{ width: 16, height: 16, accentColor: 'var(--canyon-purple)', cursor: 'pointer' }} />
+                  Submit anonymously
+                </label>
+              </div>
+              <input className="form-input" placeholder={anonymous ? 'Anonymous' : "Your full name"} value={anonymous ? '' : form.nominator}
+                onChange={e => setForm({...form, nominator: e.target.value})} disabled={anonymous}
+                style={anonymous ? { background: '#f1f5f9', color: 'var(--canyon-muted)' } : {}} />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Site</label>
+              <select className="form-select" value={form.siteId} onChange={e => setForm({...form, siteId: e.target.value})}>
+                <option value="">Select a site...</option>
+                {sites.filter(s=>s.active).map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Core Value</label>
+              <div className="value-pills">
+                {CORE_VALUES.map(v => (
+                  <label key={v} className={`value-pill ${VALUE_CLASS(v)} ${form.value===v?'selected':''}`}>
+                    <input type="radio" name="value" value={v} checked={form.value===v}
+                      onChange={()=>setForm({...form, value: v})} />
+                    {VALUE_ICONS[v]} {v}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">What did they do?</label>
+              <textarea className="form-textarea" placeholder="Describe what they did and why it matters..."
+                value={form.description} onChange={e => setForm({...form, description: e.target.value})} />
+            </div>
+
+            <button type="submit" className="btn btn-primary btn-block" disabled={submitting || !form.recipient || !form.value || !form.description || !form.siteId || (!anonymous && !form.nominator)}>
+              {submitting ? 'Submitting...' : '⭐ Submit Recognition'}
+            </button>
+          </form>
+
+          {success && (
+            <div className="success-overlay" onClick={() => setSuccess(false)}>
+              <div className="success-card" onClick={e => e.stopPropagation()}>
+                <div className="success-icon">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="3" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+                <h2>Recognition Submitted!</h2>
+                <p>Your recognition is pending admin approval and will appear on the board once reviewed.</p>
+                <button className="btn btn-primary" onClick={() => setSuccess(false)}>Submit Another</button>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // RECOGNITION FEED
+    // ═══════════════════════════════════════════════════════════
+    function FeedPage({ sites }) {
+      const [recs, setRecs] = useState([]);
+      const [filter, setFilter] = useState({ value: '', site: '' });
+      const [loading, setLoading] = useState(true);
+
+      useEffect(() => {
+        loadRecs();
+      }, [filter]);
+
+      const loadRecs = async () => {
+        setLoading(true);
+        let q = supabase.from('recognitions').select('*, recognition_sites(name)').eq('approved', true).order('created_at', { ascending: false }).limit(50);
+        if (filter.value) q = q.eq('core_value', filter.value);
+        if (filter.site) q = q.eq('site_id', filter.site);
+        const { data } = await q;
+        setRecs(data || []);
+        setLoading(false);
+      };
+
+      return (
+        <div className="page">
+          <h1 className="page-title">Recognition Feed</h1>
+          <p className="page-subtitle">See who's making a difference at Canyon Labs.</p>
+
+          <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }} className="no-print">
+            <select className="form-select" style={{ width: 'auto' }} value={filter.value} onChange={e => setFilter({...filter, value: e.target.value})}>
+              <option value="">All Values</option>
+              {CORE_VALUES.map(v => <option key={v} value={v}>{v}</option>)}
+            </select>
+            <select className="form-select" style={{ width: 'auto' }} value={filter.site} onChange={e => setFilter({...filter, site: e.target.value})}>
+              <option value="">All Sites</option>
+              {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <button className="btn btn-secondary btn-sm" onClick={() => window.print()} title="Print recognitions">🖨️ Print</button>
+          </div>
+
+          {loading ? <p style={{color:'var(--canyon-muted)'}}>Loading...</p> : (
+            <div className="rec-list">
+              {recs.length === 0 && <p style={{color:'var(--canyon-muted)'}}>No recognitions yet. Be the first to recognize a colleague!</p>}
+              {recs.map(r => (
+                <RecCard key={r.id} rec={r} />
+              ))}
+            </div>
+          )}
+
+          {/* Print-only view */}
+          <div style={{ display: 'none' }}>
+            <style>{`@media print { .print-only { display: block !important; } .screen-only { display: none !important; } }`}</style>
+          </div>
+        </div>
+      );
+    }
+
+    function RecCard({ rec, large }) {
+      const siteName = rec.recognition_sites?.name || '';
+      return (
+        <div className={`rec-card ${VALUE_CLASS(rec.core_value)}`}>
+          <div className="rec-header">
+            <span className="rec-recipient">{rec.recipient_name}</span>
+            <span className="rec-badge">{VALUE_ICONS[rec.core_value]} {rec.core_value}</span>
+          </div>
+          <div className="rec-body">{rec.description}</div>
+          <div className="rec-footer">
+            <span>Recognized by {rec.nominator_name}{siteName ? ` · ${siteName}` : ''}</span>
+            <span>{timeAgo(rec.created_at)}</span>
+          </div>
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // TV DISPLAY (Animated Slideshow)
+    // ═══════════════════════════════════════════════════════════
+    function TVDisplay() {
+      const [recs, setRecs] = useState([]);
+      const [current, setCurrent] = useState(0);
+      const [days, setDays] = useState(14);
+      const timerRef = useRef(null);
+
+      useEffect(() => {
+        loadSettings();
+      }, []);
+
+      const loadSettings = async () => {
+        const { data } = await supabase.from('recognition_settings').select('*').eq('key', 'tv_display_days').single();
+        if (data) setDays(parseInt(data.value));
+      };
+
+      useEffect(() => {
+        loadRecs();
+        const interval = setInterval(loadRecs, 60000); // refresh every minute
+        return () => clearInterval(interval);
+      }, [days]);
+
+      const loadRecs = async () => {
+        const since = new Date(Date.now() - days * 86400000).toISOString();
+        const { data } = await supabase.from('recognitions')
+          .select('*, recognition_sites(name)')
+          .eq('approved', true)
+          .gte('created_at', since)
+          .order('created_at', { ascending: false });
+        setRecs(data || []);
+      };
+
+      useEffect(() => {
+        if (recs.length <= 1) return;
+        timerRef.current = setInterval(() => {
+          setCurrent(c => (c + 1) % recs.length);
+        }, 8000);
+        return () => clearInterval(timerRef.current);
+      }, [recs]);
+
+      const r = recs[current];
+
+      return (
+        <div className="tv-container">
+          <div className="tv-header">
+            <div>
+              <div className="tv-logo"><CanyonLogo height={48} variant="white" /> Canyon Kudos</div>
+              <div className="tv-subtitle">Employee Recognition — Canyon Labs</div>
+            </div>
+            <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 14 }}>
+              Showing last {days} days · {recs.length} recognition{recs.length!==1?'s':''}
+            </div>
+          </div>
+
+          {recs.length === 0 ? (
+            <div className="tv-empty">No recognitions in the last {days} days.<br/>Be the first to recognize a colleague!</div>
+          ) : r && (
+            <div className="tv-slide" key={current}>
+              <div className={`tv-card ${VALUE_CLASS(r.core_value)}`}>
+                <div className="tv-value-icon" style={{ background: 'var(--accent-bg)' }}>
+                  {VALUE_ICONS[r.core_value]}
+                </div>
+                <div className="rec-recipient">{r.recipient_name}</div>
+                <div className="rec-badge" style={{ display: 'inline-flex', margin: '0 auto 24px' }}>{r.core_value}</div>
+                <div className="rec-body">"{r.description}"</div>
+                <div className="rec-footer">
+                  <span>Recognized by {r.nominator_name}{r.recognition_sites?.name ? ` · ${r.recognition_sites.name}` : ''} · {timeAgo(r.created_at)}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {recs.length > 1 && (
+            <div className="tv-dots">
+              {recs.map((_, i) => (
+                <div key={i} className={`tv-dot ${i===current?'active':''}`} />
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // ADMIN PAGE
+    // ═══════════════════════════════════════════════════════════
+    function AdminPage({ sites, reloadSites }) {
+      const [tab, setTab] = useState('moderation');
+      const [authed, setAuthed] = useState(false);
+      const [pw, setPw] = useState('');
+      const [pwError, setPwError] = useState(false);
+      const [checking, setChecking] = useState(false);
+
+      const checkPassword = async (e) => {
+        e.preventDefault();
+        setChecking(true);
+        setPwError(false);
+        const { data } = await supabase.from('recognition_settings').select('value').eq('key', 'admin_password').single();
+        if (data && data.value === pw) {
+          setAuthed(true);
+          sessionStorage.setItem('canyon_kudos_admin', 'true');
+        } else {
+          setPwError(true);
+        }
+        setChecking(false);
+      };
+
+      // Check session on mount
+      useEffect(() => {
+        if (sessionStorage.getItem('canyon_kudos_admin') === 'true') setAuthed(true);
+      }, []);
+
+      if (!authed) {
+        return (
+          <div className="page" style={{ maxWidth: 400 }}>
+            <h1 className="page-title">Admin Login</h1>
+            <p className="page-subtitle">Enter the admin password to continue.</p>
+            <form className="card" onSubmit={checkPassword}>
+              <div className="form-group">
+                <label className="form-label">Password</label>
+                <input className="form-input" type="password" value={pw} onChange={e => setPw(e.target.value)}
+                  placeholder="Enter admin password" autoFocus />
+              </div>
+              {pwError && <p style={{ color: '#9D2235', fontSize: 14, marginBottom: 12 }}>Incorrect password. Try again.</p>}
+              <button type="submit" className="btn btn-primary btn-block" disabled={checking || !pw}>
+                {checking ? 'Checking...' : 'Login'}
+              </button>
+            </form>
+          </div>
+        );
+      }
+
+      const TABS = ['moderation','overview','drawing','settings','print'];
+      const TAB_LABELS = { moderation: 'Moderation', overview: 'Overview', drawing: 'Drawing', settings: 'Settings', print: '🖨️ Print Cards' };
+
+      return (
+        <div className="page-wide">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+            <div>
+              <h1 className="page-title">Admin Dashboard</h1>
+              <p className="page-subtitle">Manage recognitions, settings, and quarterly drawings.</p>
+            </div>
+            <button className="btn btn-secondary btn-sm" onClick={() => { setAuthed(false); sessionStorage.removeItem('canyon_kudos_admin'); }}
+              style={{ marginTop: 4 }}>Logout</button>
+          </div>
+
+          <div style={{ display: 'flex', gap: 4, marginBottom: 24 }}>
+            {TABS.map(t => (
+              <button key={t} className={`btn btn-sm ${tab===t?'btn-primary':'btn-secondary'}`}
+                onClick={() => setTab(t)}>{TAB_LABELS[t]}</button>
+            ))}
+          </div>
+
+          {tab === 'moderation' && <ModerationTab sites={sites} />}
+          {tab === 'overview' && <OverviewTab sites={sites} />}
+          {tab === 'drawing' && <DrawingTab sites={sites} />}
+          {tab === 'settings' && <SettingsTab sites={sites} reloadSites={reloadSites} />}
+          {tab === 'print' && <PrintTab sites={sites} />}
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // MODERATION TAB
+    // ═══════════════════════════════════════════════════════════
+    function ModerationTab({ sites }) {
+      const [pending, setPending] = useState([]);
+      const [all, setAll] = useState([]);
+      const [view, setView] = useState('pending');
+      const [loading, setLoading] = useState(true);
+
+      useEffect(() => { loadAll(); }, []);
+
+      const loadAll = async () => {
+        setLoading(true);
+        const { data: p } = await supabase.from('recognitions').select('*, recognition_sites(name)')
+          .eq('approved', false).order('created_at', { ascending: false });
+        setPending(p || []);
+        const { data: a } = await supabase.from('recognitions').select('*, recognition_sites(name)')
+          .eq('approved', true).order('created_at', { ascending: false }).limit(50);
+        setAll(a || []);
+        setLoading(false);
+      };
+
+      const approve = async (id) => {
+        await supabase.from('recognitions').update({ approved: true }).eq('id', id);
+        loadAll();
+      };
+
+      const approveAll = async () => {
+        const ids = pending.map(r => r.id);
+        if (ids.length === 0) return;
+        await supabase.from('recognitions').update({ approved: true }).in('id', ids);
+        loadAll();
+      };
+
+      const deleteRec = async (id) => {
+        if (!confirm('Are you sure you want to delete this recognition? This cannot be undone.')) return;
+        await supabase.from('recognitions').delete().eq('id', id);
+        loadAll();
+      };
+
+      const recs = view === 'pending' ? pending : all;
+
+      return (
+        <div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 20 }}>
+            <button className={`btn btn-sm ${view==='pending'?'btn-primary':'btn-secondary'}`} onClick={() => setView('pending')}>
+              Pending Review {pending.length > 0 && <span style={{ background: '#9D2235', color: 'white', borderRadius: 99, padding: '2px 8px', fontSize: 11, marginLeft: 6 }}>{pending.length}</span>}
+            </button>
+            <button className={`btn btn-sm ${view==='approved'?'btn-primary':'btn-secondary'}`} onClick={() => setView('approved')}>
+              Approved ({all.length})
+            </button>
+            {view === 'pending' && pending.length > 0 && (
+              <button className="btn btn-sm btn-gold" onClick={approveAll} style={{ marginLeft: 'auto' }}>Approve All ({pending.length})</button>
+            )}
+          </div>
+
+          {loading ? <p style={{ color: 'var(--canyon-muted)' }}>Loading...</p> : (
+            <div className="rec-list">
+              {recs.length === 0 && (
+                <p style={{ color: 'var(--canyon-muted)', textAlign: 'center', padding: 32 }}>
+                  {view === 'pending' ? 'No recognitions pending review.' : 'No approved recognitions yet.'}
+                </p>
+              )}
+              {recs.map(r => (
+                <div key={r.id} className={`rec-card ${VALUE_CLASS(r.core_value)}`}>
+                  <div className="rec-header">
+                    <span className="rec-recipient">{r.recipient_name}</span>
+                    <span className="rec-badge">{VALUE_ICONS[r.core_value]} {r.core_value}</span>
+                  </div>
+                  <div className="rec-body">{r.description}</div>
+                  <div className="rec-footer">
+                    <span>Recognized by {r.nominator_name}{r.recognition_sites?.name ? ` · ${r.recognition_sites.name}` : ''}</span>
+                    <span>{timeAgo(r.created_at)}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 12, paddingTop: 12, borderTop: '1px solid #f1f5f9' }}>
+                    {!r.approved && (
+                      <button className="btn btn-primary btn-sm" onClick={() => approve(r.id)}>Approve</button>
+                    )}
+                    <button className="btn btn-sm" onClick={() => deleteRec(r.id)}
+                      style={{ background: '#fee2e2', color: '#9D2235' }}>Delete</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function OverviewTab({ sites }) {
+      const [stats, setStats] = useState({ total: 0, thisMonth: 0, thisQuarter: 0, byValue: {} });
+      const [recent, setRecent] = useState([]);
+
+      useEffect(() => {
+        loadStats();
+      }, []);
+
+      const loadStats = async () => {
+        const { data: all } = await supabase.from('recognitions').select('id, core_value, created_at');
+        if (!all) return;
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        const qMonth = Math.floor(now.getMonth() / 3) * 3;
+        const qStart = new Date(now.getFullYear(), qMonth, 1).toISOString();
+
+        const byValue = {};
+        CORE_VALUES.forEach(v => byValue[v] = 0);
+        all.forEach(r => { if (byValue[r.core_value] !== undefined) byValue[r.core_value]++; });
+
+        setStats({
+          total: all.length,
+          thisMonth: all.filter(r => r.created_at >= monthStart).length,
+          thisQuarter: all.filter(r => r.created_at >= qStart).length,
+          byValue
+        });
+
+        const { data: rec } = await supabase.from('recognitions').select('*, recognition_sites(name)').order('created_at', { ascending: false }).limit(5);
+        setRecent(rec || []);
+      };
+
+      return (
+        <div>
+          <div className="admin-grid" style={{ marginBottom: 24 }}>
+            <div className="stat-card"><div className="stat-number">{stats.total}</div><div className="stat-label">Total Recognitions</div></div>
+            <div className="stat-card"><div className="stat-number">{stats.thisMonth}</div><div className="stat-label">This Month</div></div>
+            <div className="stat-card"><div className="stat-number">{stats.thisQuarter}</div><div className="stat-label">This Quarter ({currentQuarter()})</div></div>
+            <div className="stat-card">
+              <div className="stat-label" style={{ marginBottom: 8 }}>By Core Value</div>
+              {CORE_VALUES.map(v => (
+                <div key={v} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 14 }}>
+                  <span>{VALUE_ICONS[v]} {v}</span>
+                  <strong>{stats.byValue[v] || 0}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <h3 style={{ marginBottom: 12 }}>Recent Recognitions</h3>
+          <div className="rec-list">
+            {recent.map(r => <RecCard key={r.id} rec={r} />)}
+          </div>
+        </div>
+      );
+    }
+
+    // Roulette wheel colors (alternating segments)
+    // Brand palette wheel colors (Pantone 072, 261, 201, 7597 + shades)
+    const WHEEL_COLORS = [
+      '#272E72', '#5F295E', '#9D2235', '#D14124',
+      '#1e2460', '#4d224d', '#832030', '#b5381f',
+      '#3338a0', '#7a3578', '#c02a42', '#e04a28',
+      '#202878', '#6b2f6a', '#a8253a', '#c83f22'
+    ];
+
+    function RouletteWheel({ names, spinning, rotation, onSpinClick, canSpin }) {
+      const canvasRef = useRef(null);
+      const size = 420;
+      const radius = size / 2;
+
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas || names.length === 0) return;
+        const ctx = canvas.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = size * dpr;
+        canvas.height = size * dpr;
+        ctx.scale(dpr, dpr);
+
+        const segAngle = (2 * Math.PI) / names.length;
+
+        names.forEach((name, i) => {
+          const startAngle = i * segAngle;
+          const endAngle = startAngle + segAngle;
+
+          // Draw segment
+          ctx.beginPath();
+          ctx.moveTo(radius, radius);
+          ctx.arc(radius, radius, radius - 4, startAngle, endAngle);
+          ctx.closePath();
+          ctx.fillStyle = WHEEL_COLORS[i % WHEEL_COLORS.length];
+          ctx.fill();
+
+          // Segment border
+          ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+
+          // Draw name text
+          ctx.save();
+          ctx.translate(radius, radius);
+          ctx.rotate(startAngle + segAngle / 2);
+          ctx.textAlign = 'right';
+          ctx.fillStyle = 'white';
+          ctx.font = `bold ${names.length > 20 ? 10 : names.length > 12 ? 12 : 14}px PT Sans, Arial, sans-serif`;
+          ctx.shadowColor = 'rgba(0,0,0,0.5)';
+          ctx.shadowBlur = 4;
+
+          // Truncate long names
+          let displayName = name;
+          if (ctx.measureText(name).width > radius - 60) {
+            while (ctx.measureText(displayName + '...').width > radius - 60 && displayName.length > 3) {
+              displayName = displayName.slice(0, -1);
+            }
+            displayName += '...';
+          }
+          ctx.fillText(displayName, radius - 30, 4);
+          ctx.restore();
+        });
+
+        // Inner ring shadow
+        ctx.beginPath();
+        ctx.arc(radius, radius, 50, 0, Math.PI * 2);
+        ctx.fillStyle = '#1e2235';
+        ctx.shadowColor = 'rgba(0,0,0,0.6)';
+        ctx.shadowBlur = 20;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+      }, [names]);
+
+      return (
+        <div className="roulette-wheel-wrap">
+          <div className="roulette-pointer" />
+          <div style={{
+            width: size, height: size,
+            transform: `rotate(${rotation}deg)`,
+            transition: spinning ? 'transform 5s cubic-bezier(0.15, 0.6, 0.15, 1)' : 'none',
+            borderRadius: '50%',
+            boxShadow: '0 0 60px rgba(232,77,26,0.15), 0 0 120px rgba(107,47,160,0.1), inset 0 0 30px rgba(0,0,0,0.3)',
+            border: '4px solid rgba(255,255,255,0.1)'
+          }}>
+            <canvas ref={canvasRef} style={{ width: size, height: size, borderRadius: '50%' }} />
+          </div>
+          <div className="roulette-center">
+            <button className="roulette-spin-btn" onClick={onSpinClick} disabled={!canSpin}>
+              {spinning ? '...' : 'SPIN'}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    function DrawingTab({ sites }) {
+      const [quarter, setQuarter] = useState(currentQuarter());
+      const [eligible, setEligible] = useState([]);
+      const [spinning, setSpinning] = useState(false);
+      const [winner, setWinner] = useState(null);
+      const [showWinner, setShowWinner] = useState(false);
+      const [pastDrawings, setPastDrawings] = useState([]);
+      const [siteFilter, setSiteFilter] = useState('');
+      const [fullscreen, setFullscreen] = useState(false);
+      const [rotation, setRotation] = useState(0);
+
+      useEffect(() => { loadEligible(); loadPastDrawings(); }, [quarter, siteFilter]);
+
+      const loadEligible = async () => {
+        const [y, q] = quarter.split('-Q');
+        const qNum = parseInt(q);
+        const start = new Date(parseInt(y), (qNum-1)*3, 1).toISOString();
+        const end = new Date(parseInt(y), qNum*3, 1).toISOString();
+
+        let query = supabase.from('recognitions').select('id, recipient_name, core_value, site_id, recognition_sites(name)')
+          .eq('approved', true).gte('created_at', start).lt('created_at', end);
+        if (siteFilter) query = query.eq('site_id', siteFilter);
+
+        const { data } = await query;
+        setEligible(data || []);
+      };
+
+      const loadPastDrawings = async () => {
+        const { data } = await supabase.from('recognition_drawings')
+          .select('*, recognitions:winner_recognition_id(recipient_name, core_value)')
+          .order('drawn_at', { ascending: false }).limit(10);
+        setPastDrawings(data || []);
+      };
+
+      const uniqueNames = [...new Set(eligible.map(e => e.recipient_name))];
+
+      const runDrawing = () => {
+        if (uniqueNames.length === 0 || spinning) return;
+        setSpinning(true);
+        setWinner(null);
+        setShowWinner(false);
+
+        // Pick winner
+        const idx = Math.floor(Math.random() * eligible.length);
+        const picked = eligible[idx];
+        const winnerIdx = uniqueNames.indexOf(picked.recipient_name);
+
+        // Calculate rotation: land the winner under the pointer (top center)
+        const segAngle = 360 / uniqueNames.length;
+        // Pointer is at top (270 degrees in canvas terms). We want the winner segment centered there.
+        const targetAngle = 360 - (winnerIdx * segAngle + segAngle / 2);
+        // Add multiple full rotations for drama (6-10 spins)
+        const extraSpins = (6 + Math.floor(Math.random() * 4)) * 360;
+        const finalRotation = rotation + extraSpins + targetAngle - (rotation % 360);
+
+        setRotation(finalRotation);
+
+        // After spin completes, show winner
+        setTimeout(async () => {
+          setWinner(picked);
+          setSpinning(false);
+
+          // Dramatic pause then reveal
+          await new Promise(r => setTimeout(r, 800));
+          setShowWinner(true);
+
+          // Save to database
+          await supabase.from('recognition_drawings').insert({
+            quarter,
+            winner_recognition_id: picked.id,
+            notes: `Drawn from ${eligible.length} eligible recognitions (${uniqueNames.length} unique names)`
+          });
+          loadPastDrawings();
+        }, 5200);
+      };
+
+      const siteName = siteFilter ? sites.find(s => s.id === siteFilter)?.name : 'All Sites';
+
+      // Fullscreen roulette view
+      if (fullscreen) {
+        return (
+          <div className="roulette-fullscreen">
+            <div className="roulette-header">
+              <CanyonLogo height={36} variant="white" />
+              <div>
+                <h2>Quarterly Drawing — {quarter}</h2>
+                <span>{siteName} · {uniqueNames.length} name{uniqueNames.length !== 1 ? 's' : ''} in the wheel</span>
+              </div>
+            </div>
+            <button className="roulette-close" onClick={() => { setFullscreen(false); setShowWinner(false); }}>Exit Fullscreen</button>
+
+            {uniqueNames.length === 0 ? (
+              <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 22, textAlign: 'center' }}>
+                No recognitions for {quarter}.<br/>No names to draw from.
+              </div>
+            ) : (
+              <RouletteWheel
+                names={uniqueNames}
+                spinning={spinning}
+                rotation={rotation}
+                onSpinClick={runDrawing}
+                canSpin={!spinning && uniqueNames.length > 0}
+              />
+            )}
+
+            <div className="roulette-info">
+              {eligible.length} total recognition{eligible.length !== 1 ? 's' : ''} · Each recognized employee gets one slot on the wheel
+            </div>
+
+            {showWinner && winner && (
+              <div className="roulette-winner-overlay" onClick={() => setShowWinner(false)}>
+                <div className="roulette-winner-card" onClick={e => e.stopPropagation()}>
+                  <div className="winner-confetti">🎉🏆🎉</div>
+                  <h1>Winner</h1>
+                  <div className="winner-name">{winner.recipient_name}</div>
+                  <div className="winner-value">{VALUE_ICONS[winner.core_value]} {winner.core_value}</div>
+                  <br/>
+                  <button className="btn btn-primary" onClick={() => setShowWinner(false)} style={{ marginTop: 16 }}>Close</button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      // Normal admin view
+      return (
+        <div>
+          <div className="admin-grid">
+            <div className="card">
+              <h3 style={{ marginBottom: 16 }}>Quarterly Drawing</h3>
+              <div className="form-group">
+                <label className="form-label">Quarter</label>
+                <select className="form-select" value={quarter} onChange={e => { setQuarter(e.target.value); setWinner(null); setShowWinner(false); setRotation(0); }}>
+                  {[0,-1,-2,-3].map(offset => {
+                    const d = new Date(); d.setMonth(d.getMonth() + offset * 3);
+                    const q = d.getFullYear() + '-Q' + (Math.floor(d.getMonth()/3)+1);
+                    return <option key={q} value={q}>{q}</option>;
+                  })}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Site</label>
+                <select className="form-select" value={siteFilter} onChange={e => setSiteFilter(e.target.value)}>
+                  <option value="">All Sites</option>
+                  {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+
+              <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                <p style={{ fontSize: 14, color: 'var(--canyon-muted)', marginBottom: 8 }}>
+                  {eligible.length} recognition{eligible.length!==1?'s':''} from {uniqueNames.length} unique name{uniqueNames.length!==1?'s':''}
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginBottom: 20, maxHeight: 120, overflow: 'auto' }}>
+                  {uniqueNames.map(n => (
+                    <span key={n} style={{ padding: '4px 12px', background: '#f1f5f9', borderRadius: 99, fontSize: 13, fontWeight: 500 }}>{n}</span>
+                  ))}
+                </div>
+                <button className="btn btn-gold btn-block" onClick={() => setFullscreen(true)} disabled={uniqueNames.length === 0}
+                  style={{ fontSize: 16, padding: '14px 24px' }}>
+                  🎰 Launch Roulette Wheel
+                </button>
+              </div>
+            </div>
+
+            <div className="card">
+              <h3 style={{ marginBottom: 16 }}>Past Drawings</h3>
+              {pastDrawings.length === 0 ? (
+                <p style={{ color: 'var(--canyon-muted)', fontSize: 14 }}>No drawings yet.</p>
+              ) : (
+                pastDrawings.map(d => (
+                  <div key={d.id} style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <strong>{d.recognitions?.recipient_name || 'Unknown'}</strong>
+                      <div style={{ fontSize: 12, color: 'var(--canyon-muted)' }}>{d.quarter} · {d.notes}</div>
+                    </div>
+                    <span style={{ fontSize: 12, color: 'var(--canyon-muted)' }}>{new Date(d.drawn_at).toLocaleDateString()}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function SettingsTab({ sites, reloadSites }) {
+      const [tvDays, setTvDays] = useState('14');
+      const [newSite, setNewSite] = useState('');
+      const [saving, setSaving] = useState(false);
+
+      useEffect(() => {
+        loadSettings();
+      }, []);
+
+      const loadSettings = async () => {
+        const { data } = await supabase.from('recognition_settings').select('*').eq('key', 'tv_display_days').single();
+        if (data) setTvDays(data.value);
+      };
+
+      const saveTvDays = async () => {
+        setSaving(true);
+        await supabase.from('recognition_settings').update({ value: tvDays, updated_at: new Date().toISOString() }).eq('key', 'tv_display_days');
+        setSaving(false);
+      };
+
+      const addSite = async () => {
+        if (!newSite.trim()) return;
+        await supabase.from('recognition_sites').insert({ name: newSite.trim() });
+        setNewSite('');
+        reloadSites();
+      };
+
+      const toggleSite = async (id, active) => {
+        await supabase.from('recognition_sites').update({ active: !active }).eq('id', id);
+        reloadSites();
+      };
+
+      return (
+        <div className="admin-grid">
+          <div className="card">
+            <h3 style={{ marginBottom: 16 }}>TV Display Settings</h3>
+            <div className="form-group">
+              <label className="form-label">Show recognitions from the last N days</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input className="form-input" type="number" min="1" max="365" value={tvDays}
+                  onChange={e => setTvDays(e.target.value)} style={{ width: 100 }} />
+                <button className="btn btn-primary btn-sm" onClick={saveTvDays} disabled={saving}>
+                  {saving ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--canyon-muted)' }}>
+              The TV display will auto-refresh every minute and show recognitions from this rolling window.
+            </p>
+          </div>
+
+          <div className="card">
+            <h3 style={{ marginBottom: 16 }}>Manage Sites</h3>
+            <div style={{ marginBottom: 16 }}>
+              {sites.map(s => (
+                <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ opacity: s.active ? 1 : 0.4 }}>{s.name}</span>
+                  <button className={`btn btn-sm ${s.active ? 'btn-secondary' : 'btn-primary'}`}
+                    onClick={() => toggleSite(s.id, s.active)}>
+                    {s.active ? 'Disable' : 'Enable'}
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input className="form-input" placeholder="New site name" value={newSite}
+                onChange={e => setNewSite(e.target.value)} />
+              <button className="btn btn-primary btn-sm" onClick={addSite}>Add</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // PRINT TAB
+    // ═══════════════════════════════════════════════════════════
+    function PrintTab({ sites }) {
+      const [recs, setRecs] = useState([]);
+      const [days, setDays] = useState(14);
+      const [siteFilter, setSiteFilter] = useState('');
+
+      useEffect(() => { loadRecs(); }, [days, siteFilter]);
+
+      const loadRecs = async () => {
+        const since = new Date(Date.now() - days * 86400000).toISOString();
+        let q = supabase.from('recognitions').select('*, recognition_sites(name)')
+          .eq('approved', true).gte('created_at', since).order('created_at', { ascending: false });
+        if (siteFilter) q = q.eq('site_id', siteFilter);
+        const { data } = await q;
+        setRecs(data || []);
+      };
+
+      const handlePrint = () => {
+        const printWin = window.open('', '_blank');
+        const html = recs.map(r => `
+          <div style="border: 2px solid #e2e8f0; border-left: 6px solid ${
+            r.core_value === 'Innovation' ? '#8b5cf6' :
+            r.core_value === 'Integrity' ? '#0891b2' :
+            r.core_value === 'Hard Work' ? '#dc2626' :
+            r.core_value === 'Teamwork' ? '#16a34a' : '#ea580c'
+          }; border-radius: 12px; padding: 28px 32px; margin-bottom: 20px; page-break-inside: avoid; font-family: PT Sans, Arial, sans-serif;">
+            <div style="font-size: 11px; color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px;">Canyon Labs Employee Recognition</div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <span style="font-size: 22px; font-weight: 800;">${r.recipient_name}</span>
+              <span style="padding: 4px 14px; border-radius: 99px; font-size: 12px; font-weight: 700; background: #f1f5f9; text-transform: uppercase;">${VALUE_ICONS[r.core_value] || ''} ${r.core_value}</span>
+            </div>
+            <div style="font-size: 15px; line-height: 1.7; color: #475569; margin-bottom: 12px;">${r.description}</div>
+            <div style="font-size: 12px; color: #94a3b8;">Recognized by ${r.nominator_name}${r.recognition_sites?.name ? ' · ' + r.recognition_sites.name : ''} · ${new Date(r.created_at).toLocaleDateString()}</div>
+          </div>
+        `).join('');
+
+        printWin.document.write(`<!DOCTYPE html><html><head><title>Canyon Kudos — Print</title>
+          <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700;900&family=PT+Sans:wght@400;700&display=swap" rel="stylesheet">
+          <style>@page { margin: 0.75in; } body { font-family: PT Sans, Arial, sans-serif; }</style>
+        </head><body>${html}</body></html>`);
+        printWin.document.close();
+        setTimeout(() => printWin.print(), 500);
+      };
+
+      return (
+        <div>
+          <div className="card" style={{ marginBottom: 24 }}>
+            <h3 style={{ marginBottom: 16 }}>Print Recognition Cards</h3>
+            <p style={{ fontSize: 14, color: 'var(--canyon-muted)', marginBottom: 16 }}>
+              Generate printable recognition cards for bulletin boards. Each card is sized for easy cutting and posting.
+            </p>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
+              <div>
+                <label className="form-label">Last N days</label>
+                <input className="form-input" type="number" min="1" value={days}
+                  onChange={e => setDays(parseInt(e.target.value) || 14)} style={{ width: 80 }} />
+              </div>
+              <div>
+                <label className="form-label">Site</label>
+                <select className="form-select" value={siteFilter} onChange={e => setSiteFilter(e.target.value)}>
+                  <option value="">All Sites</option>
+                  {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+              <button className="btn btn-primary" onClick={handlePrint} disabled={recs.length === 0}>
+                🖨️ Print {recs.length} Card{recs.length !== 1 ? 's' : ''}
+              </button>
+            </div>
+          </div>
+
+          <p style={{ fontSize: 14, color: 'var(--canyon-muted)', marginBottom: 16 }}>Preview ({recs.length} cards):</p>
+          <div className="rec-list">
+            {recs.map(r => <RecCard key={r.id} rec={r} />)}
+          </div>
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // APP ROOT
+    // ═══════════════════════════════════════════════════════════
+    function App() {
+      const [page, setPage] = useState('submit');
+      const [sites, setSites] = useState([]);
+
+      // Check URL params for TV mode
+      useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('view') === 'tv') setPage('tv');
+      }, []);
+
+      useEffect(() => { loadSites(); }, []);
+
+      const loadSites = async () => {
+        const { data } = await supabase.from('recognition_sites').select('*').order('name');
+        setSites(data || []);
+      };
+
+      // TV display is full-screen, no nav
+      if (page === 'tv') {
+        return (
+          <div>
+            <TVDisplay />
+            <button onClick={() => setPage('submit')}
+              style={{ position: 'fixed', top: 12, right: 12, zIndex: 10, background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.4)', border: 'none', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontSize: 12 }}>
+              Exit TV
+            </button>
+          </div>
+        );
+      }
+
+      return (
+        <div>
+          <Nav page={page} setPage={setPage} />
+          {page === 'submit' && <SubmitPage sites={sites} />}
+          {page === 'feed' && <FeedPage sites={sites} />}
+          {page === 'admin' && <AdminPage sites={sites} reloadSites={loadSites} />}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
