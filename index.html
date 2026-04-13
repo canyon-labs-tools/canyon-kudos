@@ -451,6 +451,7 @@
       const [recs, setRecs] = useState([]);
       const [current, setCurrent] = useState(0);
       const [days, setDays] = useState(14);
+      const [slideSec, setSlideSec] = useState(8);
       const timerRef = useRef(null);
 
       useEffect(() => {
@@ -458,8 +459,13 @@
       }, []);
 
       const loadSettings = async () => {
-        const { data } = await supabase.from('recognition_settings').select('*').eq('key', 'tv_display_days').single();
-        if (data) setDays(parseInt(data.value));
+        const { data } = await supabase.from('recognition_settings').select('*').in('key', ['tv_display_days', 'tv_slide_seconds']);
+        if (data) {
+          data.forEach(row => {
+            if (row.key === 'tv_display_days') setDays(parseInt(row.value));
+            if (row.key === 'tv_slide_seconds') setSlideSec(parseInt(row.value));
+          });
+        }
       };
 
       useEffect(() => {
@@ -516,9 +522,9 @@
         if (slides.length <= 1) return;
         timerRef.current = setInterval(() => {
           setCurrent(c => (c + 1) % slides.length);
-        }, 8000);
+        }, slideSec * 1000);
         return () => clearInterval(timerRef.current);
-      }, [slides]);
+      }, [slides, slideSec]);
 
       const slide = slides[current];
 
@@ -1129,22 +1135,35 @@
 
     function SettingsTab({ sites, reloadSites }) {
       const [tvDays, setTvDays] = useState('14');
+      const [tvSlide, setTvSlide] = useState('8');
       const [newSite, setNewSite] = useState('');
       const [saving, setSaving] = useState(false);
+      const [savingSlide, setSavingSlide] = useState(false);
 
       useEffect(() => {
         loadSettings();
       }, []);
 
       const loadSettings = async () => {
-        const { data } = await supabase.from('recognition_settings').select('*').eq('key', 'tv_display_days').single();
-        if (data) setTvDays(data.value);
+        const { data } = await supabase.from('recognition_settings').select('*').in('key', ['tv_display_days', 'tv_slide_seconds']);
+        if (data) {
+          data.forEach(row => {
+            if (row.key === 'tv_display_days') setTvDays(row.value);
+            if (row.key === 'tv_slide_seconds') setTvSlide(row.value);
+          });
+        }
       };
 
       const saveTvDays = async () => {
         setSaving(true);
         await supabase.from('recognition_settings').update({ value: tvDays, updated_at: new Date().toISOString() }).eq('key', 'tv_display_days');
         setSaving(false);
+      };
+
+      const saveTvSlide = async () => {
+        setSavingSlide(true);
+        await supabase.from('recognition_settings').upsert({ key: 'tv_slide_seconds', value: tvSlide, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+        setSavingSlide(false);
       };
 
       const addSite = async () => {
@@ -1173,8 +1192,18 @@
                 </button>
               </div>
             </div>
+            <div className="form-group" style={{ marginTop: 16 }}>
+              <label className="form-label">Seconds per slide</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input className="form-input" type="number" min="3" max="60" value={tvSlide}
+                  onChange={e => setTvSlide(e.target.value)} style={{ width: 100 }} />
+                <button className="btn btn-primary btn-sm" onClick={saveTvSlide} disabled={savingSlide}>
+                  {savingSlide ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </div>
             <p style={{ fontSize: 13, color: 'var(--canyon-muted)' }}>
-              The TV display will auto-refresh every minute and show recognitions from this rolling window.
+              The TV display will auto-refresh every minute. Slide duration takes effect immediately on next cycle.
             </p>
           </div>
 
