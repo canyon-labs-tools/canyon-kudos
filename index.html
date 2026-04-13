@@ -102,8 +102,9 @@
     .tv-header { padding: 32px 48px; display: flex; align-items: center; justify-content: space-between; }
     .tv-logo { color: white; font-size: 28px; font-weight: 800; display: flex; align-items: center; gap: 12px; }
     .tv-subtitle { color: rgba(255,255,255,0.5); font-size: 14px; }
-    .tv-slide { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 80%; max-width: 900px; }
-    .tv-card { background: rgba(255,255,255,0.07); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.1); border-radius: 24px; padding: 56px 64px; text-align: center; animation: slideUp 0.6s cubic-bezier(0.16,1,0.3,1); }
+    .tv-slide { position: absolute; left: 0; top: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; animation: tvFadeIn 1s ease-out; }
+    .tv-slide-inner { width: 80%; max-width: 900px; }
+    .tv-card { background: rgba(255,255,255,0.07); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.1); border-radius: 24px; padding: 56px 64px; text-align: center; }
     .tv-value-icon { width: 72px; height: 72px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; font-size: 32px; }
     .tv-card .rec-recipient { color: white; font-size: 36px; margin-bottom: 8px; }
     .tv-card .rec-badge { font-size: 14px; padding: 6px 18px; margin-bottom: 24px; }
@@ -151,7 +152,7 @@
     /* Animations */
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     @keyframes popIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
-    @keyframes slideUp { from { opacity: 0; transform: translate(-50%, -45%); } to { opacity: 1; transform: translate(-50%, -50%); } }
+    @keyframes tvFadeIn { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(1080deg); } }
     @keyframes scrollNames { 0% { transform: translateY(0); } 100% { transform: translateY(-100%); } }
     @keyframes confetti { 0% { transform: translateY(0) rotate(0); opacity: 1; } 100% { transform: translateY(-200px) rotate(720deg); opacity: 0; } }
@@ -177,7 +178,7 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect, useCallback, useRef } = React;
+    const { useState, useEffect, useCallback, useRef, useMemo } = React;
 
     // ─── Supabase Client ────────────────────────────────────
     const SUPABASE_URL = 'https://vnoaofrvtaallrbiggob.supabase.co';
@@ -189,6 +190,13 @@
     const VALUE_ICONS = {
       'Innovation': '💡', 'Integrity': '🛡️', 'Hard Work': '🔥',
       'Teamwork': '🤝', 'Passion': '❤️'
+    };
+    const VALUE_DESCRIPTIONS = {
+      'Innovation': { tagline: 'Be the innovation leaders in the industry.', description: 'Continuously improving how we work, think, and deliver value through creativity and problem-solving.' },
+      'Integrity': { tagline: 'Exemplify integrity & quality in service every day.', description: 'Doing the right thing even when it\'s hard, ensuring trust, accuracy, and ethical behavior in all work.' },
+      'Hard Work': { tagline: 'Be timely, accessible, and willing to go above & beyond.', description: 'Demonstrating accountability, responsiveness, and a strong work ethic in daily execution.' },
+      'Teamwork': { tagline: 'Celebrate shared success and team unity.', description: 'Working collaboratively across teams and sites, supporting one another and winning together.' },
+      'Passion': { tagline: 'Embody a passion for improving life.', description: 'Caring deeply about the impact of our work on customers, patients, and one another.' }
     };
     const VALUE_CLASS = v => 'value-' + v.toLowerCase().replace(' ', '-');
 
@@ -443,15 +451,39 @@
         setRecs(data || []);
       };
 
-      useEffect(() => {
-        if (recs.length <= 1) return;
-        timerRef.current = setInterval(() => {
-          setCurrent(c => (c + 1) % recs.length);
-        }, 8000);
-        return () => clearInterval(timerRef.current);
+      // Build slides: interleave recognitions with core value pages
+      const slides = useMemo(() => {
+        const result = [];
+        let valueIdx = 0;
+        if (recs.length === 0) {
+          // Just show core values if no recognitions
+          CORE_VALUES.forEach(v => result.push({ type: 'value', value: v }));
+        } else {
+          recs.forEach((r, i) => {
+            result.push({ type: 'recognition', data: r });
+            // Insert a core value slide after every recognition
+            if (valueIdx < CORE_VALUES.length) {
+              result.push({ type: 'value', value: CORE_VALUES[valueIdx] });
+              valueIdx++;
+            } else {
+              valueIdx = 0;
+              result.push({ type: 'value', value: CORE_VALUES[valueIdx] });
+              valueIdx++;
+            }
+          });
+        }
+        return result;
       }, [recs]);
 
-      const r = recs[current];
+      useEffect(() => {
+        if (slides.length <= 1) return;
+        timerRef.current = setInterval(() => {
+          setCurrent(c => (c + 1) % slides.length);
+        }, 8000);
+        return () => clearInterval(timerRef.current);
+      }, [slides]);
+
+      const slide = slides[current];
 
       return (
         <div className="tv-container">
@@ -465,27 +497,46 @@
             </div>
           </div>
 
-          {recs.length === 0 ? (
+          {!slide ? (
             <div className="tv-empty">No recognitions in the last {days} days.<br/>Be the first to recognize a colleague!</div>
-          ) : r && (
-            <div className="tv-slide" key={current}>
-              <div className={`tv-card ${VALUE_CLASS(r.core_value)}`}>
-                <div className="tv-value-icon" style={{ background: 'var(--accent-bg)' }}>
-                  {VALUE_ICONS[r.core_value]}
+          ) : slide.type === 'recognition' ? (
+            <div className="tv-slide" key={'rec-' + current}>
+              <div className="tv-slide-inner">
+                <div className={`tv-card ${VALUE_CLASS(slide.data.core_value)}`}>
+                  <div className="tv-value-icon" style={{ background: 'var(--accent-bg)' }}>
+                    {VALUE_ICONS[slide.data.core_value]}
+                  </div>
+                  <div className="rec-recipient">{slide.data.recipient_name}</div>
+                  <div className="rec-badge" style={{ display: 'inline-flex', margin: '0 auto 24px' }}>{slide.data.core_value}</div>
+                  <div className="rec-body">"{slide.data.description}"</div>
+                  <div className="rec-footer">
+                    <span>Recognized by {slide.data.nominator_name}{slide.data.recognition_sites?.name ? ` · ${slide.data.recognition_sites.name}` : ''} · {timeAgo(slide.data.created_at)}</span>
+                  </div>
                 </div>
-                <div className="rec-recipient">{r.recipient_name}</div>
-                <div className="rec-badge" style={{ display: 'inline-flex', margin: '0 auto 24px' }}>{r.core_value}</div>
-                <div className="rec-body">"{r.description}"</div>
-                <div className="rec-footer">
-                  <span>Recognized by {r.nominator_name}{r.recognition_sites?.name ? ` · ${r.recognition_sites.name}` : ''} · {timeAgo(r.created_at)}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="tv-slide" key={'val-' + current}>
+              <div className="tv-slide-inner">
+                <div className={`tv-card tv-value-slide ${VALUE_CLASS(slide.value)}`}>
+                  <div className="tv-value-icon" style={{ background: 'var(--accent-bg)', width: 96, height: 96, fontSize: 44, marginBottom: 32 }}>
+                    {VALUE_ICONS[slide.value]}
+                  </div>
+                  <div className="rec-recipient" style={{ fontSize: 44, marginBottom: 12 }}>{slide.value}</div>
+                  <div style={{ color: 'rgba(255,255,255,0.9)', fontSize: 22, fontWeight: 700, fontFamily: "'Titillium Web', sans-serif", marginBottom: 20, fontStyle: 'italic' }}>
+                    {VALUE_DESCRIPTIONS[slide.value].tagline}
+                  </div>
+                  <div className="rec-body" style={{ fontSize: 18, lineHeight: 1.8 }}>
+                    {VALUE_DESCRIPTIONS[slide.value].description}
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
-          {recs.length > 1 && (
+          {slides.length > 1 && (
             <div className="tv-dots">
-              {recs.map((_, i) => (
+              {slides.map((_, i) => (
                 <div key={i} className={`tv-dot ${i===current?'active':''}`} />
               ))}
             </div>
