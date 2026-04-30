@@ -212,6 +212,34 @@
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZub2FvZnJ2dGFhbGxyYmlnZ29iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0Mzc3MjgsImV4cCI6MjA4OTAxMzcyOH0.T0VJH25VmTPLNfUQ1rCYrLI4vCEJLh2lABj_9l6_Cms';
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+    // ─── Admin proxy (service-role-keyed Edge Function) ───────
+    const ADMIN_FN_URL = SUPABASE_URL + '/functions/v1/kudos-admin';
+    async function adminCall(action, payload = {}) {
+      const password = sessionStorage.getItem('canyon_kudos_pw') || '';
+      const res = await fetch(ADMIN_FN_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + SUPABASE_KEY,
+          'apikey': SUPABASE_KEY,
+        },
+        body: JSON.stringify({ password, action, payload }),
+      });
+      if (res.status === 401) {
+        sessionStorage.removeItem('canyon_kudos_admin');
+        sessionStorage.removeItem('canyon_kudos_pw');
+        const err = new Error('Unauthorized');
+        err.unauthorized = true;
+        throw err;
+      }
+      if (!res.ok) {
+        let msg = 'Admin request failed (' + res.status + ')';
+        try { const j = await res.json(); if (j?.error) msg = j.error; } catch {}
+        throw new Error(msg);
+      }
+      return res.json();
+    }
+
     // ─── Constants ──────────────────────────────────────────
     const CORE_VALUES = ['Innovation', 'Integrity', 'Hard Work', 'Teamwork', 'Passion'];
     const VALUE_ICONS = {
@@ -640,11 +668,16 @@
         e.preventDefault();
         setChecking(true);
         setPwError(false);
-        const { data } = await supabase.from('recognition_settings').select('value').eq('key', 'admin_password').single();
-        if (data && data.value === pw) {
+        // Stash password in sessionStorage and validate via the admin proxy.
+        // The proxy compares against recognition_settings.admin_password
+        // server-side using the service-role key — the browser never reads it.
+        sessionStorage.setItem('canyon_kudos_pw', pw);
+        try {
+          await adminCall('ping');
           setAuthed(true);
           sessionStorage.setItem('canyon_kudos_admin', 'true');
-        } else {
+        } catch {
+          sessionStorage.removeItem('canyon_kudos_pw');
           setPwError(true);
         }
         setChecking(false);
@@ -685,7 +718,7 @@
               <h1 className="page-title">Admin Dashboard</h1>
               <p className="page-subtitle">Manage recognitions, settings, and quarterly drawings.</p>
             </div>
-            <button className="btn btn-secondary btn-sm" onClick={() => { setAuthed(false); sessionStorage.removeItem('canyon_kudos_admin'); }}
+            <button className="btn btn-secondary btn-sm" onClick={() => { setAuthed(false); sessionStorage.removeItem('canyon_kudos_admin'); sessionStorage.removeItem('canyon_kudos_pw'); }}
               style={{ marginTop: 4 }}>Logout</button>
           </div>
 
@@ -718,31 +751,32 @@
 
       const loadAll = async () => {
         setLoading(true);
-        const { data: p } = await supabase.from('recognitions').select('*, recognition_sites(name)')
-          .eq('approved', false).order('created_at', { ascending: false });
-        setPending(p || []);
-        const { data: a } = await supabase.from('recognitions').select('*, recognition_sites(name)')
-          .eq('approved', true).order('created_at', { ascending: false }).limit(50);
-        setAll(a || []);
+        try {
+          const { pending: p, approved: a } = await adminCall('loadModeration');
+          setPending(p || []);
+          setAll(a || []);
+        } catch (e) {
+          if (!e.unauthorized) console.error(e);
+        }
         setLoading(false);
       };
 
       const approve = async (id) => {
-        await supabase.from('recognitions').update({ approved: true }).eq('id', id);
-        loadAll();
+        try { await adminCall('approve', { id }); loadAll(); }
+        catch (e) { if (!e.unauthorized) alert(e.message); }
       };
 
       const approveAll = async () => {
         const ids = pending.map(r => r.id);
         if (ids.length === 0) return;
-        await supabase.from('recognitions').update({ approved: true }).in('id', ids);
-        loadAll();
+        try { await adminCall('approveBulk', { ids }); loadAll(); }
+        catch (e) { if (!e.unauthorized) alert(e.message); }
       };
 
       const deleteRec = async (id) => {
         if (!confirm('Are you sure you want to delete this recognition? This cannot be undone.')) return;
-        await supabase.from('recognitions').delete().eq('id', id);
-        loadAll();
+        try { await adminCall('deleteRec', { id }); loadAll(); }
+        catch (e) { if (!e.unauthorized) alert(e.message); }
       };
 
       const recs = view === 'pending' ? pending : all;
@@ -803,7 +837,13 @@
       }, []);
 
       const loadStats = async () => {
-        const { data: all } = await supabase.from('recognitions').select('id, core_value, created_at');
+        let all, recent;
+        try {
+          ({ all, recent } = await adminCall('loadOverviewStats'));
+        } catch (e) {
+          if (!e.unauthorized) console.error(e);
+          return;
+        }
         if (!all) return;
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
@@ -821,8 +861,7 @@
           byValue
         });
 
-        const { data: rec } = await supabase.from('recognitions').select('*, recognition_sites(name)').order('created_at', { ascending: false }).limit(5);
-        setRecent(rec || []);
+        setRecent(recent || []);
       };
 
       return (
@@ -975,10 +1014,12 @@
       };
 
       const loadPastDrawings = async () => {
-        const { data } = await supabase.from('recognition_drawings')
-          .select('*, recognitions:winner_recognition_id(recipient_name, core_value)')
-          .order('drawn_at', { ascending: false }).limit(10);
-        setPastDrawings(data || []);
+        try {
+          const { drawings } = await adminCall('loadDrawings');
+          setPastDrawings(drawings || []);
+        } catch (e) {
+          if (!e.unauthorized) console.error(e);
+        }
       };
 
       const uniqueNames = [...new Set(eligible.map(e => e.recipient_name))];
@@ -1013,12 +1054,16 @@
           await new Promise(r => setTimeout(r, 800));
           setShowWinner(true);
 
-          // Save to database
-          await supabase.from('recognition_drawings').insert({
-            quarter,
-            winner_recognition_id: picked.id,
-            notes: `Drawn from ${eligible.length} eligible recognitions (${uniqueNames.length} unique names)`
-          });
+          // Save to database via admin proxy
+          try {
+            await adminCall('insertDrawing', {
+              quarter,
+              winner_recognition_id: picked.id,
+              notes: `Drawn from ${eligible.length} eligible recognitions (${uniqueNames.length} unique names)`
+            });
+          } catch (e) {
+            if (!e.unauthorized) console.error('Failed to record drawing:', e);
+          }
           loadPastDrawings();
         }, 5200);
       };
@@ -1156,26 +1201,32 @@
 
       const saveTvDays = async () => {
         setSaving(true);
-        await supabase.from('recognition_settings').update({ value: tvDays, updated_at: new Date().toISOString() }).eq('key', 'tv_display_days');
+        try { await adminCall('updateSetting', { key: 'tv_display_days', value: tvDays }); }
+        catch (e) { if (!e.unauthorized) alert(e.message); }
         setSaving(false);
       };
 
       const saveTvSlide = async () => {
         setSavingSlide(true);
-        await supabase.from('recognition_settings').upsert({ key: 'tv_slide_seconds', value: tvSlide, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+        try { await adminCall('upsertSetting', { key: 'tv_slide_seconds', value: tvSlide }); }
+        catch (e) { if (!e.unauthorized) alert(e.message); }
         setSavingSlide(false);
       };
 
       const addSite = async () => {
         if (!newSite.trim()) return;
-        await supabase.from('recognition_sites').insert({ name: newSite.trim() });
-        setNewSite('');
-        reloadSites();
+        try {
+          await adminCall('addSite', { name: newSite.trim() });
+          setNewSite('');
+          reloadSites();
+        } catch (e) { if (!e.unauthorized) alert(e.message); }
       };
 
       const toggleSite = async (id, active) => {
-        await supabase.from('recognition_sites').update({ active: !active }).eq('id', id);
-        reloadSites();
+        try {
+          await adminCall('toggleSite', { id, active });
+          reloadSites();
+        } catch (e) { if (!e.unauthorized) alert(e.message); }
       };
 
       return (
