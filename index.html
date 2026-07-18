@@ -1290,6 +1290,8 @@
       const [recs, setRecs] = useState([]);
       const [days, setDays] = useState(14);
       const [siteFilter, setSiteFilter] = useState('');
+      const [mode, setMode] = useState('populated');
+      const [blankQty, setBlankQty] = useState(12);
 
       useEffect(() => { loadRecs(); }, [days, siteFilter]);
 
@@ -1329,36 +1331,110 @@
         setTimeout(() => printWin.print(), 500);
       };
 
+      // Blank fill-in card (quarter-page) for handwritten recognitions.
+      const blankCardHTML = () => {
+        const VALUE_HEX = { 'Innovation': '#8b5cf6', 'Integrity': '#0891b2', 'Hard Work': '#dc2626', 'Teamwork': '#16a34a', 'Passion': '#ea580c' };
+        const cb = '<span style="display:inline-block;width:12px;height:12px;border:1.5px solid #475569;border-radius:3px;vertical-align:middle;margin-right:5px;"></span>';
+        const line = 'border-bottom:1px solid #cbd5e1;height:19px;';
+        const valueRow = ['Innovation', 'Integrity', 'Hard Work', 'Teamwork', 'Passion'].map(v =>
+          `<span style="display:inline-block;white-space:nowrap;margin-right:12px;font-size:11px;font-weight:600;">${cb}<span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${VALUE_HEX[v]};vertical-align:middle;margin-right:4px;"></span>${v}</span>`).join('');
+        return `
+          <div style="border:1.5px dashed #94a3b8;border-radius:10px;padding:18px 20px;height:4.75in;box-sizing:border-box;page-break-inside:avoid;font-family:'PT Sans',Arial,sans-serif;display:flex;flex-direction:column;color:#191919;">
+            <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #272E72;padding-bottom:8px;margin-bottom:13px;">
+              <img src="${location.origin}/canyon-labs-logo.png" alt="Canyon Labs" style="height:28px;" onerror="this.style.display='none'" />
+              <span style="font-size:11px;font-weight:800;letter-spacing:1.5px;color:#5F295E;text-transform:uppercase;">Bracelet Award</span>
+            </div>
+            <div style="font-size:12px;font-weight:700;margin-bottom:4px;">Recognizing</div>
+            <div style="${line}margin-bottom:12px;"></div>
+            <div style="display:flex;align-items:flex-end;gap:14px;margin-bottom:12px;">
+              <div style="flex:1;"><div style="font-size:12px;font-weight:700;margin-bottom:4px;">From</div><div style="${line}"></div></div>
+              <div style="font-size:11px;white-space:nowrap;padding-bottom:2px;">${cb}Submit anonymously</div>
+            </div>
+            <div style="font-size:12px;font-weight:700;margin-bottom:7px;">Core value (check one)</div>
+            <div style="margin-bottom:13px;line-height:1.5;">${valueRow}</div>
+            <div style="font-size:12px;font-weight:700;margin-bottom:8px;">What did they do?</div>
+            <div style="${line}margin-bottom:9px;"></div>
+            <div style="${line}margin-bottom:9px;"></div>
+            <div style="${line}margin-bottom:9px;"></div>
+            <div style="margin-top:auto;font-size:10px;color:#64748b;text-align:center;border-top:1px solid #e2e8f0;padding-top:8px;">Drop your completed card in a Canyon Labs recognition box.</div>
+          </div>`;
+      };
+
+      const handlePrintBlank = () => {
+        const printWin = window.open('', '_blank');
+        const cards = Array.from({ length: blankQty }, () => blankCardHTML()).join('');
+        printWin.document.write(`<!DOCTYPE html><html><head><title>Canyon Kudos — Blank Cards</title>
+          <link href="https://fonts.googleapis.com/css2?family=PT+Sans:wght@400;700&display=swap" rel="stylesheet">
+          <style>@page { margin:0.4in; } body { font-family:'PT Sans',Arial,sans-serif; margin:0; } .grid { display:grid; grid-template-columns:1fr 1fr; gap:0.25in; }</style>
+        </head><body><div class="grid">${cards}</div></body></html>`);
+        printWin.document.close();
+        setTimeout(() => printWin.print(), 500);
+      };
+
       return (
         <div>
           <div className="card" style={{ marginBottom: 24 }}>
-            <h3 style={{ marginBottom: 16 }}>Print Recognition Cards</h3>
-            <p style={{ fontSize: 14, color: 'var(--canyon-muted)', marginBottom: 16 }}>
-              Generate printable recognition cards for bulletin boards. Each card is sized for easy cutting and posting.
-            </p>
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
-              <div>
-                <label className="form-label">Last N days</label>
-                <input className="form-input" type="number" min="1" value={days}
-                  onChange={e => setDays(parseInt(e.target.value) || 14)} style={{ width: 80 }} />
-              </div>
-              <div>
-                <label className="form-label">Site</label>
-                <select className="form-select" value={siteFilter} onChange={e => setSiteFilter(e.target.value)}>
-                  <option value="">All Sites</option>
-                  {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
-              <button className="btn btn-primary" onClick={handlePrint} disabled={recs.length === 0}>
-                🖨️ Print {recs.length} Card{recs.length !== 1 ? 's' : ''}
-              </button>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 18 }}>
+              <button className={`btn btn-sm ${mode === 'populated' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setMode('populated')}>Populated cards</button>
+              <button className={`btn btn-sm ${mode === 'blank' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setMode('blank')}>Blank template</button>
             </div>
+            {mode === 'populated' ? (
+              <div>
+                <h3 style={{ marginBottom: 8 }}>Print Recognition Cards</h3>
+                <p style={{ fontSize: 14, color: 'var(--canyon-muted)', marginBottom: 16 }}>
+                  Printable cards for existing approved recognitions — sized for cutting and posting on a bulletin board.
+                </p>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
+                  <div>
+                    <label className="form-label">Last N days</label>
+                    <input className="form-input" type="number" min="1" value={days}
+                      onChange={e => setDays(parseInt(e.target.value) || 14)} style={{ width: 80 }} />
+                  </div>
+                  <div>
+                    <label className="form-label">Site</label>
+                    <select className="form-select" value={siteFilter} onChange={e => setSiteFilter(e.target.value)}>
+                      <option value="">All Sites</option>
+                      {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </div>
+                  <button className="btn btn-primary" onClick={handlePrint} disabled={recs.length === 0}>
+                    🖨️ Print {recs.length} Card{recs.length !== 1 ? 's' : ''}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <h3 style={{ marginBottom: 8 }}>Print Blank Cards</h3>
+                <p style={{ fontSize: 14, color: 'var(--canyon-muted)', marginBottom: 16 }}>
+                  Blank fill-in cards to set out for handwritten recognitions — 4 per page (quarter-page). Completed cards go in a recognition drop box.
+                </p>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
+                  <div>
+                    <label className="form-label">How many cards</label>
+                    <input className="form-input" type="number" min="1" max="200" value={blankQty}
+                      onChange={e => setBlankQty(Math.max(1, parseInt(e.target.value) || 12))} style={{ width: 90 }} />
+                  </div>
+                  <button className="btn btn-primary" onClick={handlePrintBlank}>
+                    🖨️ Print {blankQty} Blank Card{blankQty !== 1 ? 's' : ''} ({Math.ceil(blankQty / 4)} page{Math.ceil(blankQty / 4) !== 1 ? 's' : ''})
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
-          <p style={{ fontSize: 14, color: 'var(--canyon-muted)', marginBottom: 16 }}>Preview ({recs.length} cards):</p>
-          <div className="rec-list">
-            {recs.map(r => <RecCard key={r.id} rec={r} />)}
-          </div>
+          {mode === 'populated' ? (
+            <div>
+              <p style={{ fontSize: 14, color: 'var(--canyon-muted)', marginBottom: 16 }}>Preview ({recs.length} cards):</p>
+              <div className="rec-list">
+                {recs.map(r => <RecCard key={r.id} rec={r} />)}
+              </div>
+            </div>
+          ) : (
+            <div>
+              <p style={{ fontSize: 14, color: 'var(--canyon-muted)', marginBottom: 16 }}>Preview (one card):</p>
+              <div style={{ maxWidth: 380 }} dangerouslySetInnerHTML={{ __html: blankCardHTML() }} />
+            </div>
+          )}
         </div>
       );
     }
