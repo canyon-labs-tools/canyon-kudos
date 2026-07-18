@@ -8,6 +8,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700;900&family=PT+Sans:wght@400;700&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -708,8 +709,8 @@
         );
       }
 
-      const TABS = ['moderation','overview','drawing','settings','print'];
-      const TAB_LABELS = { moderation: 'Moderation', overview: 'Overview', drawing: 'Drawing', settings: 'Settings', print: '🖨️ Print Cards' };
+      const TABS = ['moderation','overview','drawing','settings','print','slides'];
+      const TAB_LABELS = { moderation: 'Moderation', overview: 'Overview', drawing: 'Drawing', settings: 'Settings', print: '🖨️ Print Cards', slides: '📊 Slides' };
 
       return (
         <div className="page-wide">
@@ -734,6 +735,7 @@
           {tab === 'drawing' && <DrawingTab sites={sites} />}
           {tab === 'settings' && <SettingsTab sites={sites} reloadSites={reloadSites} />}
           {tab === 'print' && <PrintTab sites={sites} />}
+          {tab === 'slides' && <SlidesTab sites={sites} />}
         </div>
       );
     }
@@ -1354,6 +1356,177 @@
           </div>
 
           <p style={{ fontSize: 14, color: 'var(--canyon-muted)', marginBottom: 16 }}>Preview ({recs.length} cards):</p>
+          <div className="rec-list">
+            {recs.map(r => <RecCard key={r.id} rec={r} />)}
+          </div>
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // SLIDES TAB — PowerPoint slide export (matches deck template)
+    // ═══════════════════════════════════════════════════════════
+    function SlidesTab({ sites }) {
+      const [weeks, setWeeks] = useState(2);
+      const [siteFilter, setSiteFilter] = useState('');
+      const [recs, setRecs] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [generating, setGenerating] = useState(false);
+      const [status, setStatus] = useState('');
+
+      useEffect(() => { loadRecs(); }, [weeks, siteFilter]);
+
+      const loadRecs = async () => {
+        setLoading(true);
+        const since = new Date(Date.now() - weeks * 7 * 86400000).toISOString();
+        let q = supabase.from('recognitions').select('*, recognition_sites(name)')
+          .eq('approved', true).gte('created_at', since).order('created_at', { ascending: false });
+        if (siteFilter) q = q.eq('site_id', siteFilter);
+        const { data } = await q;
+        setRecs(data || []);
+        setStatus('');
+        setLoading(false);
+      };
+
+      // Show short write-ups in full; truncate long ones cleanly at a word
+      // boundary so the person is still recognized without a wall of text.
+      const smartTrunc = (t, max = 150) => {
+        if (!t) return '';
+        t = t.trim().replace(/\s+/g, ' ');
+        if (t.length <= max) return t;
+        let cut = t.slice(0, max);
+        const sp = cut.lastIndexOf(' ');
+        if (sp > max * 0.6) cut = cut.slice(0, sp);
+        return cut.replace(/[.,;:\s]+$/, '') + '…';
+      };
+
+      const VALUE_HEX = {
+        'Innovation': '8B5CF6', 'Integrity': '0891B2', 'Hard Work': 'DC2626',
+        'Teamwork': '16A34A', 'Passion': 'EA580C'
+      };
+      const NAVY = '272E72', GOLD = 'D14124', MUTED = '64748B';
+
+      const generatePptx = async () => {
+        if (!recs.length || typeof PptxGenJS === 'undefined') {
+          setStatus(typeof PptxGenJS === 'undefined' ? '⚠ Slide library failed to load — check your connection and retry.' : '');
+          return;
+        }
+        setGenerating(true);
+        setStatus('Building slides…');
+        try {
+          const fmt = d => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          const startLbl = fmt(recs[recs.length - 1].created_at);
+          const endLbl = fmt(recs[0].created_at);
+          const year = new Date(recs[0].created_at).getFullYear();
+          const rangeLabel = startLbl === endLbl ? `${startLbl}, ${year}` : `${startLbl} – ${endLbl}, ${year}`;
+
+          // Canyon Labs template chrome (logo + mountain footer + © line)
+          // as a full-bleed background; content is drawn on the white canvas.
+          let bg = null;
+          try {
+            const blob = await fetch('slide-template-bg.png').then(r => r.blob());
+            bg = await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(blob); });
+          } catch (_) { /* falls back to plain white */ }
+
+          const pptx = new PptxGenJS();
+          pptx.layout = 'LAYOUT_WIDE'; // 13.333 x 7.5 in — matches the template
+          pptx.author = 'Canyon Kudos';
+          pptx.title = 'Canyon Labs Bracelet Awards';
+
+          const SW = 13.333, MARGIN = 0.55, GAP = 0.35;
+          const CARD_W = (SW - 2 * MARGIN - GAP) / 2;
+          const CARD_H = 1.3, ROW_GAP = 0.22, TOP = 1.8;
+          const colX = [MARGIN, MARGIN + CARD_W + GAP];
+          const rowY = [TOP, TOP + CARD_H + ROW_GAP, TOP + 2 * (CARD_H + ROW_GAP)];
+          const PER = 6;
+
+          const pages = [];
+          for (let i = 0; i < recs.length; i += PER) pages.push(recs.slice(i, i + PER));
+
+          pages.forEach((page, pi) => {
+            const slide = pptx.addSlide();
+            if (bg) slide.addImage({ data: bg, x: 0, y: 0, w: SW, h: 7.5 });
+            else slide.background = { color: 'FFFFFF' };
+
+            // ── Title (top-left white area; no accent line) ──
+            slide.addText('Bracelet Awards', { x: MARGIN, y: 0.5, w: 8.5, h: 0.6, fontFace: 'Arial', fontSize: 30, bold: true, color: NAVY, margin: 0 });
+            slide.addText(`${rangeLabel}   ·   ${recs.length} recognition${recs.length !== 1 ? 's' : ''}`,
+              { x: MARGIN, y: 1.16, w: 8.5, h: 0.34, fontFace: 'Arial', fontSize: 13, color: MUTED, margin: 0 });
+
+            // ── Recognition cards (white card + value pill; no edge stripe) ──
+            page.forEach((r, idx) => {
+              const cx = colX[idx % 2], cy = rowY[Math.floor(idx / 2)];
+              const vhex = VALUE_HEX[r.core_value] || GOLD;
+              slide.addShape(pptx.ShapeType.roundRect, { x: cx, y: cy, w: CARD_W, h: CARD_H, rectRadius: 0.06, fill: { color: 'FFFFFF' }, line: { color: 'E2E8F0', width: 1 }, shadow: { type: 'outer', blur: 5, offset: 2, angle: 90, color: 'A0A0A0', opacity: 0.28 } });
+              // small value-colored dot — recurring motif, not an edge stripe
+              slide.addShape(pptx.ShapeType.ellipse, { x: cx + 0.3, y: cy + 0.34, w: 0.15, h: 0.15, fill: { color: vhex } });
+
+              const nameX = cx + 0.62, innerX = cx + 0.3, innerW = CARD_W - 0.6;
+              const pillW = 1.75, pillH = 0.32;
+              // recipient (leave room for the value pill on the right)
+              slide.addText(r.recipient_name || '—', { x: nameX, y: cy + 0.18, w: CARD_W - 0.62 - pillW - 0.32, h: 0.4, fontFace: 'Arial', fontSize: 15, bold: true, color: NAVY, valign: 'middle', margin: 0 });
+              // value pill
+              slide.addShape(pptx.ShapeType.roundRect, { x: cx + CARD_W - pillW - 0.24, y: cy + 0.22, w: pillW, h: pillH, rectRadius: 0.16, fill: { color: vhex } });
+              slide.addText((r.core_value || '').toUpperCase(), { x: cx + CARD_W - pillW - 0.24, y: cy + 0.22, w: pillW, h: pillH, align: 'center', valign: 'middle', fontFace: 'Arial', fontSize: 8.5, bold: true, color: 'FFFFFF', margin: 0 });
+              // meta line
+              const site = r.recognition_sites?.name ? ' · ' + r.recognition_sites.name : '';
+              slide.addText(`from ${r.nominator_name || 'Anonymous'}${site} · ${fmt(r.created_at)}`,
+                { x: innerX, y: cy + 0.58, w: innerW, h: 0.26, fontFace: 'Arial', fontSize: 9.5, italic: true, color: MUTED, margin: 0 });
+              // description (short in full, long truncated cleanly)
+              const desc = smartTrunc(r.description, 135);
+              if (desc) slide.addText(desc, { x: innerX, y: cy + 0.86, w: innerW, h: CARD_H - 0.94, fontFace: 'Arial', fontSize: 10, color: '475569', valign: 'top', lineSpacingMultiple: 1.02, margin: 0 });
+            });
+
+            // ── Page number (white, over the mountain footer) ──
+            if (pages.length > 1)
+              slide.addText(`${pi + 1} / ${pages.length}`, { x: SW - 1.5, y: 7.0, w: 1.1, h: 0.35, align: 'right', fontFace: 'Arial', fontSize: 11, color: 'FFFFFF', margin: 0 });
+          });
+
+          const fn = `Canyon-Kudos-Recognition_${startLbl}-${endLbl}_${year}`.replace(/[^A-Za-z0-9_\-]/g, '') + '.pptx';
+          await pptx.writeFile({ fileName: fn });
+          setStatus(`✓ Downloaded ${pages.length} slide${pages.length !== 1 ? 's' : ''} covering ${recs.length} recognition${recs.length !== 1 ? 's' : ''}.`);
+        } catch (e) {
+          console.error(e);
+          setStatus('⚠ ' + (e.message || 'Generation failed.'));
+        }
+        setGenerating(false);
+      };
+
+      return (
+        <div>
+          <div className="card" style={{ marginBottom: 24 }}>
+            <h3 style={{ marginBottom: 8 }}>Generate Recognition Slide</h3>
+            <p style={{ fontSize: 14, color: 'var(--canyon-muted)', marginBottom: 20 }}>
+              Export approved recognitions into a PowerPoint slide (.pptx) you can drop straight into a deck.
+              Everyone submitted is recognized; short write-ups show in full, long ones are trimmed cleanly. Overflows onto extra slides automatically.
+            </p>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
+              <div>
+                <label className="form-label">Window</label>
+                <select className="form-select" value={weeks} onChange={e => setWeeks(parseInt(e.target.value))} style={{ minWidth: 150 }}>
+                  <option value={1}>Last 1 week</option>
+                  <option value={2}>Last 2 weeks</option>
+                  <option value={4}>Last 4 weeks</option>
+                  <option value={8}>Last 8 weeks</option>
+                </select>
+              </div>
+              <div>
+                <label className="form-label">Site</label>
+                <select className="form-select" value={siteFilter} onChange={e => setSiteFilter(e.target.value)}>
+                  <option value="">All Sites</option>
+                  {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+              <button className="btn btn-primary" onClick={generatePptx} disabled={loading || generating || recs.length === 0}>
+                {generating ? 'Generating…' : `📊 Generate Slide${recs.length > 6 ? 's' : ''} (${recs.length})`}
+              </button>
+            </div>
+            {status && <p style={{ fontSize: 14, marginTop: 16, marginBottom: 0, color: status[0] === '⚠' ? '#9D2235' : 'var(--canyon-navy)', fontWeight: 600 }}>{status}</p>}
+          </div>
+
+          <p style={{ fontSize: 14, color: 'var(--canyon-muted)', marginBottom: 16 }}>
+            {loading ? 'Loading…' : `Preview — ${recs.length} recognition${recs.length !== 1 ? 's' : ''} in window (${Math.ceil(recs.length / 6) || 0} slide${Math.ceil(recs.length / 6) !== 1 ? 's' : ''}):`}
+          </p>
           <div className="rec-list">
             {recs.map(r => <RecCard key={r.id} rec={r} />)}
           </div>
