@@ -345,23 +345,44 @@
       const [form, setForm] = useState({ recipient: '', nominator: '', value: '', description: '', siteId: '' });
       const [submitting, setSubmitting] = useState(false);
       const [success, setSuccess] = useState(false);
+      const [submitStatus, setSubmitStatus] = useState('published');
       const [anonymous, setAnonymous] = useState(false);
 
       const handleSubmit = async (e) => {
         e.preventDefault();
         if (!form.recipient || (!anonymous && !form.nominator) || !form.value || !form.description || !form.siteId) return;
         setSubmitting(true);
-        const { error } = await supabase.from('recognitions').insert({
-          recipient_name: form.recipient.trim(),
-          nominator_name: anonymous ? 'Anonymous' : form.nominator.trim(),
-          core_value: form.value,
-          description: form.description.trim(),
-          site_id: form.siteId
-        });
+        // Route through the moderated submit function (auto-approves clean
+        // submissions; holds anything questionable for review). It inserts
+        // server-side, so the browser can't self-approve.
+        let ok = false, status = 'held';
+        try {
+          const res = await fetch(SUPABASE_URL + '/functions/v1/kudos-submit', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + SUPABASE_KEY,
+              'apikey': SUPABASE_KEY,
+            },
+            body: JSON.stringify({
+              recipient_name: form.recipient.trim(),
+              nominator_name: anonymous ? 'Anonymous' : form.nominator.trim(),
+              core_value: form.value,
+              description: form.description.trim(),
+              site_id: form.siteId,
+            }),
+          });
+          const data = await res.json().catch(() => ({}));
+          ok = res.ok && data.ok;
+          status = data.status || 'held';
+        } catch (_) { ok = false; }
         setSubmitting(false);
-        if (!error) {
+        if (ok) {
+          setSubmitStatus(status);
           setSuccess(true);
           setForm({ recipient: '', nominator: '', value: '', description: '', siteId: form.siteId });
+        } else {
+          alert('Sorry — your recognition could not be submitted. Please try again.');
         }
       };
 
@@ -440,8 +461,10 @@
                 <div className="success-icon">
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="3" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
                 </div>
-                <h2>Recognition Submitted!</h2>
-                <p>Your recognition is pending admin approval and will appear on the board once reviewed.</p>
+                <h2>{submitStatus === 'published' ? 'Recognition Posted! 🎉' : 'Recognition Submitted!'}</h2>
+                <p>{submitStatus === 'published'
+                  ? "It's live on the recognition board now — thanks for celebrating a teammate!"
+                  : 'Thanks! Your recognition was received and will appear on the board after a quick review.'}</p>
                 <button className="btn btn-primary" onClick={() => setSuccess(false)}>Submit Another</button>
               </div>
             </div>
@@ -861,6 +884,11 @@
                     <span className="rec-badge">{VALUE_ICONS[r.core_value]} {r.core_value}</span>
                   </div>
                   <div className="rec-body">{r.description}</div>
+                  {r.flag_reason && (
+                    <div style={{ marginTop: 10, padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, fontSize: 13, color: '#9D2235' }}>
+                      ⚠️ Held by auto-review: {r.flag_reason}
+                    </div>
+                  )}
                   <div className="rec-footer">
                     <span>Recognized by {r.nominator_name}{r.recognition_sites?.name ? ` · ${r.recognition_sites.name}` : ''}</span>
                     <span>{timeAgo(r.created_at)}</span>
