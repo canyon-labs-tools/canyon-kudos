@@ -735,7 +735,7 @@
           {tab === 'drawing' && <DrawingTab sites={sites} />}
           {tab === 'settings' && <SettingsTab sites={sites} reloadSites={reloadSites} />}
           {tab === 'print' && <PrintTab sites={sites} />}
-          {tab === 'slides' && <SlidesTab sites={sites} />}
+          {tab === 'slides' && <SlidesTab />}
         </div>
       );
     }
@@ -1366,22 +1366,20 @@
     // ═══════════════════════════════════════════════════════════
     // SLIDES TAB — PowerPoint slide export (matches deck template)
     // ═══════════════════════════════════════════════════════════
-    function SlidesTab({ sites }) {
+    function SlidesTab() {
       const [weeks, setWeeks] = useState(2);
-      const [siteFilter, setSiteFilter] = useState('');
       const [recs, setRecs] = useState([]);
       const [loading, setLoading] = useState(true);
       const [generating, setGenerating] = useState(false);
       const [status, setStatus] = useState('');
 
-      useEffect(() => { loadRecs(); }, [weeks, siteFilter]);
+      useEffect(() => { loadRecs(); }, [weeks]);
 
       const loadRecs = async () => {
         setLoading(true);
         const since = new Date(Date.now() - weeks * 7 * 86400000).toISOString();
-        let q = supabase.from('recognitions').select('*, recognition_sites(name)')
+        const q = supabase.from('recognitions').select('*, recognition_sites(name)')
           .eq('approved', true).gte('created_at', since).order('created_at', { ascending: false });
-        if (siteFilter) q = q.eq('site_id', siteFilter);
         const { data } = await q;
         setRecs(data || []);
         setStatus('');
@@ -1469,8 +1467,7 @@
               slide.addShape(pptx.ShapeType.roundRect, { x: cx + CARD_W - pillW - 0.24, y: cy + 0.22, w: pillW, h: pillH, rectRadius: 0.16, fill: { color: vhex } });
               slide.addText((r.core_value || '').toUpperCase(), { x: cx + CARD_W - pillW - 0.24, y: cy + 0.22, w: pillW, h: pillH, align: 'center', valign: 'middle', fontFace: 'Arial', fontSize: 8.5, bold: true, color: 'FFFFFF', margin: 0 });
               // meta line
-              const site = r.recognition_sites?.name ? ' · ' + r.recognition_sites.name : '';
-              slide.addText(`from ${r.nominator_name || 'Anonymous'}${site} · ${fmt(r.created_at)}`,
+              slide.addText(`from ${r.nominator_name || 'Anonymous'} · ${fmt(r.created_at)}`,
                 { x: innerX, y: cy + 0.58, w: innerW, h: 0.26, fontFace: 'Arial', fontSize: 9.5, italic: true, color: MUTED, margin: 0 });
               // description (short in full, long truncated cleanly)
               const desc = smartTrunc(r.description, 135);
@@ -1508,13 +1505,6 @@
                   <option value={2}>Last 2 weeks</option>
                   <option value={4}>Last 4 weeks</option>
                   <option value={8}>Last 8 weeks</option>
-                </select>
-              </div>
-              <div>
-                <label className="form-label">Site</label>
-                <select className="form-select" value={siteFilter} onChange={e => setSiteFilter(e.target.value)}>
-                  <option value="">All Sites</option>
-                  {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
               <button className="btn btn-primary" onClick={generatePptx} disabled={loading || generating || recs.length === 0}>
