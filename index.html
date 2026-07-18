@@ -1420,21 +1420,22 @@
           const year = new Date(recs[0].created_at).getFullYear();
           const rangeLabel = startLbl === endLbl ? `${startLbl}, ${year}` : `${startLbl} – ${endLbl}, ${year}`;
 
-          // Pull the white logo as a data URL for the header band (optional).
-          let logo = null;
+          // Canyon Labs template chrome (logo + mountain footer + © line)
+          // as a full-bleed background; content is drawn on the white canvas.
+          let bg = null;
           try {
-            const blob = await fetch('canyon-labs-logo-white.png').then(r => r.blob());
-            logo = await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(blob); });
-          } catch (_) { /* header falls back to text */ }
+            const blob = await fetch('slide-template-bg.png').then(r => r.blob());
+            bg = await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(blob); });
+          } catch (_) { /* falls back to plain white */ }
 
           const pptx = new PptxGenJS();
-          pptx.layout = 'LAYOUT_WIDE'; // 13.333 x 7.5 in
+          pptx.layout = 'LAYOUT_WIDE'; // 13.333 x 7.5 in — matches the template
           pptx.author = 'Canyon Kudos';
           pptx.title = 'Canyon Labs Employee Recognition';
 
-          const SW = 13.333, MARGIN = 0.4, GAP = 0.3;
+          const SW = 13.333, MARGIN = 0.55, GAP = 0.35;
           const CARD_W = (SW - 2 * MARGIN - GAP) / 2;
-          const CARD_H = 1.7, ROW_GAP = 0.25, TOP = 1.5;
+          const CARD_H = 1.3, ROW_GAP = 0.22, TOP = 1.8;
           const colX = [MARGIN, MARGIN + CARD_W + GAP];
           const rowY = [TOP, TOP + CARD_H + ROW_GAP, TOP + 2 * (CARD_H + ROW_GAP)];
           const PER = 6;
@@ -1444,41 +1445,41 @@
 
           pages.forEach((page, pi) => {
             const slide = pptx.addSlide();
-            slide.background = { color: 'F1F5F9' };
+            if (bg) slide.addImage({ data: bg, x: 0, y: 0, w: SW, h: 7.5 });
+            else slide.background = { color: 'FFFFFF' };
 
-            // ── Header band ──
-            slide.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: SW, h: 1.15, fill: { color: NAVY } });
-            const titleX = logo ? 2.6 : MARGIN;
-            if (logo) slide.addImage({ data: logo, x: MARGIN, y: 0.3, w: 1.9, h: 0.56, sizing: { type: 'contain', w: 1.9, h: 0.56 } });
-            slide.addText('Employee Recognition', { x: titleX, y: 0.16, w: 8.5, h: 0.5, fontFace: 'Titillium Web', fontSize: 26, bold: true, color: 'FFFFFF' });
+            // ── Title (top-left white area; no accent line) ──
+            slide.addText('Employee Recognition', { x: MARGIN, y: 0.5, w: 8.5, h: 0.6, fontFace: 'Arial', fontSize: 30, bold: true, color: NAVY, margin: 0 });
             slide.addText(`${rangeLabel}   ·   ${recs.length} recognition${recs.length !== 1 ? 's' : ''}`,
-              { x: titleX, y: 0.68, w: 8.5, h: 0.34, fontFace: 'PT Sans', fontSize: 12, color: 'C7CAE0' });
-            if (pages.length > 1)
-              slide.addText(`${pi + 1} / ${pages.length}`, { x: SW - 1.7, y: 0.4, w: 1.3, h: 0.4, align: 'right', fontFace: 'PT Sans', fontSize: 12, color: 'C7CAE0' });
+              { x: MARGIN, y: 1.16, w: 8.5, h: 0.34, fontFace: 'Arial', fontSize: 13, color: MUTED, margin: 0 });
 
-            // ── Recognition cards ──
+            // ── Recognition cards (white card + value pill; no edge stripe) ──
             page.forEach((r, idx) => {
               const cx = colX[idx % 2], cy = rowY[Math.floor(idx / 2)];
               const vhex = VALUE_HEX[r.core_value] || GOLD;
-              slide.addShape(pptx.ShapeType.roundRect, { x: cx, y: cy, w: CARD_W, h: CARD_H, rectRadius: 0.08, fill: { color: 'FFFFFF' }, line: { color: 'E2E8F0', width: 1 } });
-              // colored accent bar
-              slide.addShape(pptx.ShapeType.rect, { x: cx, y: cy + 0.06, w: 0.1, h: CARD_H - 0.12, fill: { color: vhex } });
+              slide.addShape(pptx.ShapeType.roundRect, { x: cx, y: cy, w: CARD_W, h: CARD_H, rectRadius: 0.06, fill: { color: 'FFFFFF' }, line: { color: 'E2E8F0', width: 1 }, shadow: { type: 'outer', blur: 5, offset: 2, angle: 90, color: 'A0A0A0', opacity: 0.28 } });
+              // small value-colored dot — recurring motif, not an edge stripe
+              slide.addShape(pptx.ShapeType.ellipse, { x: cx + 0.3, y: cy + 0.34, w: 0.15, h: 0.15, fill: { color: vhex } });
 
-              const pad = 0.32, innerX = cx + pad, innerW = CARD_W - pad - 0.28;
-              const pillW = 1.85, pillH = 0.34;
+              const nameX = cx + 0.62, innerX = cx + 0.3, innerW = CARD_W - 0.6;
+              const pillW = 1.75, pillH = 0.32;
               // recipient (leave room for the value pill on the right)
-              slide.addText(r.recipient_name || '—', { x: innerX, y: cy + 0.16, w: innerW - pillW - 0.1, h: 0.42, fontFace: 'Titillium Web', fontSize: 16, bold: true, color: NAVY, valign: 'middle' });
+              slide.addText(r.recipient_name || '—', { x: nameX, y: cy + 0.18, w: CARD_W - 0.62 - pillW - 0.32, h: 0.4, fontFace: 'Arial', fontSize: 15, bold: true, color: NAVY, valign: 'middle', margin: 0 });
               // value pill
-              slide.addShape(pptx.ShapeType.roundRect, { x: cx + CARD_W - pillW - 0.22, y: cy + 0.2, w: pillW, h: pillH, rectRadius: 0.17, fill: { color: vhex } });
-              slide.addText((r.core_value || '').toUpperCase(), { x: cx + CARD_W - pillW - 0.22, y: cy + 0.2, w: pillW, h: pillH, align: 'center', valign: 'middle', fontFace: 'PT Sans', fontSize: 9, bold: true, color: 'FFFFFF' });
+              slide.addShape(pptx.ShapeType.roundRect, { x: cx + CARD_W - pillW - 0.24, y: cy + 0.22, w: pillW, h: pillH, rectRadius: 0.16, fill: { color: vhex } });
+              slide.addText((r.core_value || '').toUpperCase(), { x: cx + CARD_W - pillW - 0.24, y: cy + 0.22, w: pillW, h: pillH, align: 'center', valign: 'middle', fontFace: 'Arial', fontSize: 8.5, bold: true, color: 'FFFFFF', margin: 0 });
               // meta line
               const site = r.recognition_sites?.name ? ' · ' + r.recognition_sites.name : '';
               slide.addText(`from ${r.nominator_name || 'Anonymous'}${site} · ${fmt(r.created_at)}`,
-                { x: innerX, y: cy + 0.62, w: innerW, h: 0.28, fontFace: 'PT Sans', fontSize: 10, italic: true, color: MUTED });
-              // description (short in full, long truncated)
-              const desc = smartTrunc(r.description, 150);
-              if (desc) slide.addText(desc, { x: innerX, y: cy + 0.94, w: innerW, h: CARD_H - 1.02, fontFace: 'PT Sans', fontSize: 10.5, color: '475569', valign: 'top', lineSpacingMultiple: 1.04 });
+                { x: innerX, y: cy + 0.58, w: innerW, h: 0.26, fontFace: 'Arial', fontSize: 9.5, italic: true, color: MUTED, margin: 0 });
+              // description (short in full, long truncated cleanly)
+              const desc = smartTrunc(r.description, 135);
+              if (desc) slide.addText(desc, { x: innerX, y: cy + 0.86, w: innerW, h: CARD_H - 0.94, fontFace: 'Arial', fontSize: 10, color: '475569', valign: 'top', lineSpacingMultiple: 1.02, margin: 0 });
             });
+
+            // ── Page number (white, over the mountain footer) ──
+            if (pages.length > 1)
+              slide.addText(`${pi + 1} / ${pages.length}`, { x: SW - 1.5, y: 7.0, w: 1.1, h: 0.35, align: 'right', fontFace: 'Arial', fontSize: 11, color: 'FFFFFF', margin: 0 });
           });
 
           const fn = `Canyon-Kudos-Recognition_${startLbl}-${endLbl}_${year}`.replace(/[^A-Za-z0-9_\-]/g, '') + '.pptx';
