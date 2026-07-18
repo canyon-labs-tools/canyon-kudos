@@ -350,7 +350,7 @@
 
       const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!form.recipient || (!anonymous && !form.nominator) || !form.value || !form.description || !form.siteId) return;
+        if (!form.recipient || (!anonymous && !form.nominator) || !form.value || !form.description) return;
         setSubmitting(true);
         // Route through the moderated submit function (auto-approves clean
         // submissions; holds anything questionable for review). It inserts
@@ -369,7 +369,7 @@
               nominator_name: anonymous ? 'Anonymous' : form.nominator.trim(),
               core_value: form.value,
               description: form.description.trim(),
-              site_id: form.siteId,
+              site_id: null,
             }),
           });
           const data = await res.json().catch(() => ({}));
@@ -380,7 +380,7 @@
         if (ok) {
           setSubmitStatus(status);
           setSuccess(true);
-          setForm({ recipient: '', nominator: '', value: '', description: '', siteId: form.siteId });
+          setForm({ recipient: '', nominator: '', value: '', description: '', siteId: '' });
         } else {
           alert('Sorry — your recognition could not be submitted. Please try again.');
         }
@@ -413,16 +413,6 @@
             </div>
 
             <div className="form-group">
-              <label className="form-label">Site</label>
-              <select className="form-select" value={form.siteId} onChange={e => setForm({...form, siteId: e.target.value})}>
-                <option value="">Select a site...</option>
-                {sites.filter(s=>s.active).map(s => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group">
               <label className="form-label">Core Value</label>
               <div className="value-pills">
                 {CORE_VALUES.map(v => (
@@ -441,7 +431,7 @@
                 value={form.description} onChange={e => setForm({...form, description: e.target.value})} />
             </div>
 
-            <button type="submit" className="btn btn-primary btn-block" disabled={submitting || !form.recipient || !form.value || !form.description || !form.siteId || (!anonymous && !form.nominator)}>
+            <button type="submit" className="btn btn-primary btn-block" disabled={submitting || !form.recipient || !form.value || !form.description || (!anonymous && !form.nominator)}>
               {submitting ? 'Submitting...' : '⭐ Submit Recognition'}
             </button>
           </form>
