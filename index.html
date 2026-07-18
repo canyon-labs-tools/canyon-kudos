@@ -1431,7 +1431,7 @@
           const pptx = new PptxGenJS();
           pptx.layout = 'LAYOUT_WIDE'; // 13.333 x 7.5 in — matches the template
           pptx.author = 'Canyon Kudos';
-          pptx.title = 'Canyon Labs Employee Recognition';
+          pptx.title = 'Canyon Labs Bracelet Awards';
 
           const SW = 13.333, MARGIN = 0.55, GAP = 0.35;
           const CARD_W = (SW - 2 * MARGIN - GAP) / 2;
@@ -1449,7 +1449,7 @@
             else slide.background = { color: 'FFFFFF' };
 
             // ── Title (top-left white area; no accent line) ──
-            slide.addText('Employee Recognition', { x: MARGIN, y: 0.5, w: 8.5, h: 0.6, fontFace: 'Arial', fontSize: 30, bold: true, color: NAVY, margin: 0 });
+            slide.addText('Bracelet Awards', { x: MARGIN, y: 0.5, w: 8.5, h: 0.6, fontFace: 'Arial', fontSize: 30, bold: true, color: NAVY, margin: 0 });
             slide.addText(`${rangeLabel}   ·   ${recs.length} recognition${recs.length !== 1 ? 's' : ''}`,
               { x: MARGIN, y: 1.16, w: 8.5, h: 0.34, fontFace: 'Arial', fontSize: 13, color: MUTED, margin: 0 });
 
