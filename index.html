@@ -1472,6 +1472,69 @@
       };
       const NAVY = '272E72', GOLD = 'D14124', MUTED = '64748B';
 
+      const SW = 13.333, MARGIN = 0.55, GAP = 0.35;
+      const CARD_W = (SW - 2 * MARGIN - GAP) / 2;
+      const FULL_W = SW - 2 * MARGIN;
+      const CARD_H = 1.3, WIDE_H = 1.55, ROW_GAP = 0.22, TOP = 1.8;
+      const BOTTOM = 6.55; // content stops above the mountain footer art
+      const colX = [MARGIN, MARGIN + CARD_W + GAP];
+      const PILL_W = 1.75, PILL_H = 0.32;
+
+      // Rough Arial advance width, in inches. Only used to decide how big a
+      // name is — a group recognition can carry a dozen names and must not
+      // spill out of its card.
+      const estW = (s, pt, bold) => (s || '').length * pt * (bold ? 0.55 : 0.5) / 72;
+      const nameBoxW = cardW => cardW - 0.62 - PILL_W - 0.32;
+
+      // Largest size at which the name still fits inside maxLines.
+      const fitPt = (name, boxW, maxLines, hi, lo) => {
+        for (let pt = hi; pt > lo; pt -= 0.5)
+          if (estW(name, pt, true) <= boxW * maxLines * 0.94) return pt;
+        return lo;
+      };
+
+      // Drop whole names (never half a name) if even the wide card can't hold them.
+      const fitNames = (name, boxW, maxLines, pt) => {
+        if (estW(name, pt, true) <= boxW * maxLines * 0.94) return name;
+        const parts = (name || '').split(/\s*,\s*/).filter(Boolean);
+        for (let keep = parts.length - 1; keep >= 1; keep--) {
+          const s = parts.slice(0, keep).join(', ') + ` +${parts.length - keep} more`;
+          if (estW(s, pt, true) <= boxW * maxLines * 0.94) return s;
+        }
+        return name;
+      };
+
+      // Flow the cards into pages: half-width cards pair up, and a recognition
+      // whose name won't sit on one line of a half-width card (i.e. a team
+      // award) takes a full-width row rather than overflowing its card.
+      const planPages = list => {
+        const pages = [];
+        let cur = [], y = TOP, col = 0;
+        const closePage = () => { if (cur.length) pages.push(cur); cur = []; y = TOP; col = 0; };
+        list.forEach(r => {
+          const nm = r.recipient_name || '—';
+          const wide = estW(nm, 15, true) > nameBoxW(CARD_W) * 0.94;
+          const it = { r, nm, wide, h: wide ? WIDE_H : CARD_H };
+          if (wide) {
+            if (col === 1) { y += CARD_H + ROW_GAP; col = 0; }
+            if (y + it.h > BOTTOM) closePage();
+            cur.push({ ...it, x: MARGIN, y, w: FULL_W });
+            y += it.h + ROW_GAP;
+          } else if (col === 0) {
+            if (y + it.h > BOTTOM) closePage();
+            cur.push({ ...it, x: colX[0], y, w: CARD_W });
+            col = 1;
+          } else {
+            cur.push({ ...it, x: colX[1], y, w: CARD_W });
+            y += it.h + ROW_GAP; col = 0;
+          }
+        });
+        closePage();
+        return pages;
+      };
+
+      const slideCount = useMemo(() => planPages(recs).length, [recs]);
+
       const generatePptx = async () => {
         if (!recs.length || typeof PptxGenJS === 'undefined') {
           setStatus(typeof PptxGenJS === 'undefined' ? '⚠ Slide library failed to load — check your connection and retry.' : '');
@@ -1499,15 +1562,7 @@
           pptx.author = 'Canyon Kudos';
           pptx.title = 'Canyon Labs Bracelet Awards';
 
-          const SW = 13.333, MARGIN = 0.55, GAP = 0.35;
-          const CARD_W = (SW - 2 * MARGIN - GAP) / 2;
-          const CARD_H = 1.3, ROW_GAP = 0.22, TOP = 1.8;
-          const colX = [MARGIN, MARGIN + CARD_W + GAP];
-          const rowY = [TOP, TOP + CARD_H + ROW_GAP, TOP + 2 * (CARD_H + ROW_GAP)];
-          const PER = 6;
-
-          const pages = [];
-          for (let i = 0; i < recs.length; i += PER) pages.push(recs.slice(i, i + PER));
+          const pages = planPages(recs);
 
           pages.forEach((page, pi) => {
             const slide = pptx.addSlide();
@@ -1520,26 +1575,28 @@
               { x: MARGIN, y: 1.16, w: 8.5, h: 0.34, fontFace: 'Arial', fontSize: 13, color: MUTED, margin: 0 });
 
             // ── Recognition cards (white card + value pill; no edge stripe) ──
-            page.forEach((r, idx) => {
-              const cx = colX[idx % 2], cy = rowY[Math.floor(idx / 2)];
+            page.forEach(c => {
+              const r = c.r, cx = c.x, cy = c.y, cw = c.w, ch = c.h;
               const vhex = VALUE_HEX[r.core_value] || GOLD;
-              slide.addShape(pptx.ShapeType.roundRect, { x: cx, y: cy, w: CARD_W, h: CARD_H, rectRadius: 0.06, fill: { color: 'FFFFFF' }, line: { color: 'E2E8F0', width: 1 }, shadow: { type: 'outer', blur: 5, offset: 2, angle: 90, color: 'A0A0A0', opacity: 0.28 } });
+              slide.addShape(pptx.ShapeType.roundRect, { x: cx, y: cy, w: cw, h: ch, rectRadius: 0.06, fill: { color: 'FFFFFF' }, line: { color: 'E2E8F0', width: 1 }, shadow: { type: 'outer', blur: 5, offset: 2, angle: 90, color: 'A0A0A0', opacity: 0.28 } });
               // small value-colored dot — recurring motif, not an edge stripe
               slide.addShape(pptx.ShapeType.ellipse, { x: cx + 0.3, y: cy + 0.34, w: 0.15, h: 0.15, fill: { color: vhex } });
 
-              const nameX = cx + 0.62, innerX = cx + 0.3, innerW = CARD_W - 0.6;
-              const pillW = 1.75, pillH = 0.32;
+              const nameX = cx + 0.62, innerX = cx + 0.3, innerW = cw - 0.6;
+              const nw = nameBoxW(cw), nameH = c.wide ? 0.62 : 0.4;
+              const namePt = fitPt(c.nm, nw, 2, 15, c.wide ? 10 : 11);
               // recipient (leave room for the value pill on the right)
-              slide.addText(r.recipient_name || '—', { x: nameX, y: cy + 0.18, w: CARD_W - 0.62 - pillW - 0.32, h: 0.4, fontFace: 'Arial', fontSize: 15, bold: true, color: NAVY, valign: 'middle', margin: 0 });
+              slide.addText(fitNames(c.nm, nw, 2, namePt), { x: nameX, y: cy + 0.18, w: nw, h: nameH, fontFace: 'Arial', fontSize: namePt, bold: true, color: NAVY, valign: 'middle', margin: 0 });
               // value pill
-              slide.addShape(pptx.ShapeType.roundRect, { x: cx + CARD_W - pillW - 0.24, y: cy + 0.22, w: pillW, h: pillH, rectRadius: 0.16, fill: { color: vhex } });
-              slide.addText((r.core_value || '').toUpperCase(), { x: cx + CARD_W - pillW - 0.24, y: cy + 0.22, w: pillW, h: pillH, align: 'center', valign: 'middle', fontFace: 'Arial', fontSize: 8.5, bold: true, color: 'FFFFFF', margin: 0 });
+              slide.addShape(pptx.ShapeType.roundRect, { x: cx + cw - PILL_W - 0.24, y: cy + 0.22, w: PILL_W, h: PILL_H, rectRadius: 0.16, fill: { color: vhex } });
+              slide.addText((r.core_value || '').toUpperCase(), { x: cx + cw - PILL_W - 0.24, y: cy + 0.22, w: PILL_W, h: PILL_H, align: 'center', valign: 'middle', fontFace: 'Arial', fontSize: 8.5, bold: true, color: 'FFFFFF', margin: 0 });
               // meta line
+              const metaY = cy + 0.18 + nameH;
               slide.addText(`from ${r.nominator_name || 'Anonymous'} · ${fmt(r.created_at)}`,
-                { x: innerX, y: cy + 0.58, w: innerW, h: 0.26, fontFace: 'Arial', fontSize: 9.5, italic: true, color: MUTED, margin: 0 });
+                { x: innerX, y: metaY, w: innerW, h: 0.26, fontFace: 'Arial', fontSize: 9.5, italic: true, color: MUTED, margin: 0 });
               // description (short in full, long truncated cleanly)
-              const desc = smartTrunc(r.description, 135);
-              if (desc) slide.addText(desc, { x: innerX, y: cy + 0.86, w: innerW, h: CARD_H - 0.94, fontFace: 'Arial', fontSize: 10, color: '475569', valign: 'top', lineSpacingMultiple: 1.02, margin: 0 });
+              const desc = smartTrunc(r.description, c.wide ? 300 : 135);
+              if (desc) slide.addText(desc, { x: innerX, y: metaY + 0.28, w: innerW, h: cy + ch - (metaY + 0.28) - 0.08, fontFace: 'Arial', fontSize: 10, color: '475569', valign: 'top', lineSpacingMultiple: 1.02, margin: 0 });
             });
 
             // ── Page number (white, over the mountain footer) ──
@@ -1576,14 +1633,14 @@
                 </select>
               </div>
               <button className="btn btn-primary" onClick={generatePptx} disabled={loading || generating || recs.length === 0}>
-                {generating ? 'Generating…' : `📊 Generate Slide${recs.length > 6 ? 's' : ''} (${recs.length})`}
+                {generating ? 'Generating…' : `📊 Generate Slide${slideCount !== 1 ? 's' : ''} (${recs.length})`}
               </button>
             </div>
             {status && <p style={{ fontSize: 14, marginTop: 16, marginBottom: 0, color: status[0] === '⚠' ? '#9D2235' : 'var(--canyon-navy)', fontWeight: 600 }}>{status}</p>}
           </div>
 
           <p style={{ fontSize: 14, color: 'var(--canyon-muted)', marginBottom: 16 }}>
-            {loading ? 'Loading…' : `Preview — ${recs.length} recognition${recs.length !== 1 ? 's' : ''} in window (${Math.ceil(recs.length / 6) || 0} slide${Math.ceil(recs.length / 6) !== 1 ? 's' : ''}):`}
+            {loading ? 'Loading…' : `Preview — ${recs.length} recognition${recs.length !== 1 ? 's' : ''} in window (${slideCount} slide${slideCount !== 1 ? 's' : ''}):`}
           </p>
           <div className="rec-list">
             {recs.map(r => <RecCard key={r.id} rec={r} />)}
