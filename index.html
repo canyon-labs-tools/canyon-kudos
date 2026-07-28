@@ -9,6 +9,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"
+          integrity="sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk"
+          crossorigin="anonymous"></script>
   <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700;900&family=PT+Sans:wght@400;700&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -345,17 +348,15 @@
       const [form, setForm] = useState({ recipient: '', nominator: '', value: '', description: '', siteId: '' });
       const [submitting, setSubmitting] = useState(false);
       const [success, setSuccess] = useState(false);
-      const [submitStatus, setSubmitStatus] = useState('published');
       const [anonymous, setAnonymous] = useState(false);
 
       const handleSubmit = async (e) => {
         e.preventDefault();
         if (!form.recipient || (!anonymous && !form.nominator) || !form.value || !form.description) return;
         setSubmitting(true);
-        // Route through the moderated submit function (auto-approves clean
-        // submissions; holds anything questionable for review). It inserts
-        // server-side, so the browser can't self-approve.
-        let ok = false, status = 'held';
+        // Route through the submit function rather than inserting directly —
+        // it holds the service-role key, so the table stays closed to the browser.
+        let ok = false;
         try {
           const res = await fetch(SUPABASE_URL + '/functions/v1/kudos-submit', {
             method: 'POST',
@@ -374,11 +375,9 @@
           });
           const data = await res.json().catch(() => ({}));
           ok = res.ok && data.ok;
-          status = data.status || 'held';
         } catch (_) { ok = false; }
         setSubmitting(false);
         if (ok) {
-          setSubmitStatus(status);
           setSuccess(true);
           setForm({ recipient: '', nominator: '', value: '', description: '', siteId: '' });
         } else {
@@ -451,10 +450,8 @@
                 <div className="success-icon">
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="3" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
                 </div>
-                <h2>{submitStatus === 'published' ? 'Recognition Posted! 🎉' : 'Recognition Submitted!'}</h2>
-                <p>{submitStatus === 'published'
-                  ? "It's live on the recognition board now — thanks for celebrating a teammate!"
-                  : 'Thanks! Your recognition was received and will appear on the board after a quick review.'}</p>
+                <h2>Recognition Posted! 🎉</h2>
+                <p>It's live on the recognition board now — thanks for celebrating a teammate!</p>
                 <button className="btn btn-primary" onClick={() => setSuccess(false)}>Submit Another</button>
               </div>
             </div>
@@ -722,7 +719,7 @@
     // ADMIN PAGE
     // ═══════════════════════════════════════════════════════════
     function AdminPage({ sites, reloadSites }) {
-      const [tab, setTab] = useState('moderation');
+      const [tab, setTab] = useState('overview');
       const [authed, setAuthed] = useState(false);
       const [pw, setPw] = useState('');
       const [pwError, setPwError] = useState(false);
@@ -772,8 +769,8 @@
         );
       }
 
-      const TABS = ['moderation','overview','drawing','settings','print','slides'];
-      const TAB_LABELS = { moderation: 'Moderation', overview: 'Overview', drawing: 'Drawing', settings: 'Settings', print: '🖨️ Print Cards', slides: '📊 Slides' };
+      const TABS = ['overview','drawing','settings','print','slides','export'];
+      const TAB_LABELS = { overview: 'Overview', drawing: 'Drawing', settings: 'Settings', print: '🖨️ Print Cards', slides: '📊 Slides', export: '📧 Email / PDF' };
 
       return (
         <div className="page-wide">
@@ -793,107 +790,12 @@
             ))}
           </div>
 
-          {tab === 'moderation' && <ModerationTab sites={sites} />}
           {tab === 'overview' && <OverviewTab sites={sites} />}
           {tab === 'drawing' && <DrawingTab sites={sites} />}
           {tab === 'settings' && <SettingsTab sites={sites} reloadSites={reloadSites} />}
           {tab === 'print' && <PrintTab sites={sites} />}
           {tab === 'slides' && <SlidesTab />}
-        </div>
-      );
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // MODERATION TAB
-    // ═══════════════════════════════════════════════════════════
-    function ModerationTab({ sites }) {
-      const [pending, setPending] = useState([]);
-      const [all, setAll] = useState([]);
-      const [view, setView] = useState('pending');
-      const [loading, setLoading] = useState(true);
-
-      useEffect(() => { loadAll(); }, []);
-
-      const loadAll = async () => {
-        setLoading(true);
-        try {
-          const { pending: p, approved: a } = await adminCall('loadModeration');
-          setPending(p || []);
-          setAll(a || []);
-        } catch (e) {
-          if (!e.unauthorized) console.error(e);
-        }
-        setLoading(false);
-      };
-
-      const approve = async (id) => {
-        try { await adminCall('approve', { id }); loadAll(); }
-        catch (e) { if (!e.unauthorized) alert(e.message); }
-      };
-
-      const approveAll = async () => {
-        const ids = pending.map(r => r.id);
-        if (ids.length === 0) return;
-        try { await adminCall('approveBulk', { ids }); loadAll(); }
-        catch (e) { if (!e.unauthorized) alert(e.message); }
-      };
-
-      const deleteRec = async (id) => {
-        if (!confirm('Are you sure you want to delete this recognition? This cannot be undone.')) return;
-        try { await adminCall('deleteRec', { id }); loadAll(); }
-        catch (e) { if (!e.unauthorized) alert(e.message); }
-      };
-
-      const recs = view === 'pending' ? pending : all;
-
-      return (
-        <div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 20 }}>
-            <button className={`btn btn-sm ${view==='pending'?'btn-primary':'btn-secondary'}`} onClick={() => setView('pending')}>
-              Pending Review {pending.length > 0 && <span style={{ background: '#9D2235', color: 'white', borderRadius: 99, padding: '2px 8px', fontSize: 11, marginLeft: 6 }}>{pending.length}</span>}
-            </button>
-            <button className={`btn btn-sm ${view==='approved'?'btn-primary':'btn-secondary'}`} onClick={() => setView('approved')}>
-              Approved ({all.length})
-            </button>
-            {view === 'pending' && pending.length > 0 && (
-              <button className="btn btn-sm btn-gold" onClick={approveAll} style={{ marginLeft: 'auto' }}>Approve All ({pending.length})</button>
-            )}
-          </div>
-
-          {loading ? <p style={{ color: 'var(--canyon-muted)' }}>Loading...</p> : (
-            <div className="rec-list">
-              {recs.length === 0 && (
-                <p style={{ color: 'var(--canyon-muted)', textAlign: 'center', padding: 32 }}>
-                  {view === 'pending' ? 'No recognitions pending review.' : 'No approved recognitions yet.'}
-                </p>
-              )}
-              {recs.map(r => (
-                <div key={r.id} className={`rec-card ${VALUE_CLASS(r.core_value)}`}>
-                  <div className="rec-header">
-                    <span className="rec-recipient">{r.recipient_name}</span>
-                    <span className="rec-badge">{VALUE_ICONS[r.core_value]} {r.core_value}</span>
-                  </div>
-                  <div className="rec-body">{r.description}</div>
-                  {r.flag_reason && (
-                    <div style={{ marginTop: 10, padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, fontSize: 13, color: '#9D2235' }}>
-                      ⚠️ Held by auto-review: {r.flag_reason}
-                    </div>
-                  )}
-                  <div className="rec-footer">
-                    <span>Recognized by {r.nominator_name}{r.recognition_sites?.name ? ` · ${r.recognition_sites.name}` : ''}</span>
-                    <span>{timeAgo(r.created_at)}</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 12, paddingTop: 12, borderTop: '1px solid #f1f5f9' }}>
-                    {!r.approved && (
-                      <button className="btn btn-primary btn-sm" onClick={() => approve(r.id)}>Approve</button>
-                    )}
-                    <button className="btn btn-sm" onClick={() => deleteRec(r.id)}
-                      style={{ background: '#fee2e2', color: '#9D2235' }}>Delete</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          {tab === 'export' && <ExportTab />}
         </div>
       );
     }
@@ -934,6 +836,14 @@
         setRecent(recent || []);
       };
 
+      // Recognitions post straight to the board, so this list is the one place
+      // a mistaken or inappropriate entry can be taken back down.
+      const deleteRec = async (id) => {
+        if (!confirm('Delete this recognition? This cannot be undone.')) return;
+        try { await adminCall('deleteRec', { id }); loadStats(); }
+        catch (e) { if (!e.unauthorized) alert(e.message); }
+      };
+
       return (
         <div>
           <div className="admin-grid" style={{ marginBottom: 24 }}>
@@ -953,7 +863,15 @@
 
           <h3 style={{ marginBottom: 12 }}>Recent Recognitions</h3>
           <div className="rec-list">
-            {recent.map(r => <RecCard key={r.id} rec={r} />)}
+            {recent.map(r => (
+              <div key={r.id}>
+                <RecCard rec={r} />
+                <div style={{ textAlign: 'right', marginTop: 6 }}>
+                  <button className="btn btn-sm" onClick={() => deleteRec(r.id)}
+                    style={{ background: '#fee2e2', color: '#9D2235' }}>Delete</button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       );
@@ -1642,6 +1560,365 @@
           <p style={{ fontSize: 14, color: 'var(--canyon-muted)', marginBottom: 16 }}>
             {loading ? 'Loading…' : `Preview — ${recs.length} recognition${recs.length !== 1 ? 's' : ''} in window (${slideCount} slide${slideCount !== 1 ? 's' : ''}):`}
           </p>
+          <div className="rec-list">
+            {recs.map(r => <RecCard key={r.id} rec={r} />)}
+          </div>
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // EMAIL / PDF EXPORT TAB
+    // ═══════════════════════════════════════════════════════════
+
+    // Date inputs hand back 'YYYY-MM-DD'. `new Date('2026-07-20')` reads that as
+    // UTC midnight, which is the 19th anywhere west of Greenwich — so always
+    // build these from parts and keep every boundary in local time.
+    const parseYMD = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+    const fmtYMD = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+    // Monday of the week containing d — the program runs on Mon–Sun weeks.
+    const mondayOf = d => addDays(d, -((d.getDay() + 6) % 7));
+
+    const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const ordinal = n => { const s = ['th','st','nd','rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
+
+    const presetRange = p => {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const thisMon = mondayOf(today);
+      if (p === 'thisweek') return [thisMon, today];
+      if (p === 'lastweek') return [addDays(thisMon, -7), addDays(thisMon, -1)];
+      if (p === 'last2') return [addDays(thisMon, -14), addDays(thisMon, -1)];
+      return [addDays(thisMon, -7), addDays(thisMon, -1)];
+    };
+
+    // Mirrors the wording Rochester already uses ("Awarded Week of July 20th, 2026")
+    // when the range is a whole Mon–Sun week, and degrades to explicit dates otherwise.
+    const rangeLabel = (from, to) => {
+      const days = Math.round((to - from) / 86400000);
+      if ((from.getDay() + 6) % 7 === 0 && days === 6)
+        return `Awarded Week of ${MONTHS[from.getMonth()]} ${ordinal(from.getDate())}, ${from.getFullYear()}`;
+      if (days === 0)
+        return `Awarded ${MONTHS[from.getMonth()]} ${from.getDate()}, ${from.getFullYear()}`;
+      const sameYear = from.getFullYear() === to.getFullYear();
+      const left = `${MONTHS[from.getMonth()]} ${from.getDate()}` + (sameYear ? '' : `, ${from.getFullYear()}`);
+      return `Awarded ${left} – ${MONTHS[to.getMonth()]} ${to.getDate()}, ${to.getFullYear()}`;
+    };
+
+    // Submissions are typed in a hurry, so "wendy mach" is common. Capitalise a
+    // token only when it is entirely lowercase — that leaves deliberate internal
+    // capitals ("McElroy", "LaPierre", "DeSoto") exactly as the submitter typed them.
+    const tidyName = s => (s || '').trim().split(/\s+/)
+      .map(w => (w === w.toLowerCase() ? w.charAt(0).toUpperCase() + w.slice(1) : w))
+      .join(' ');
+
+    const nominatorLine = r =>
+      (r.nominator_name || '').trim().toLowerCase() === 'anonymous'
+        ? 'From: Anonymous'
+        : `Nominated by ${tidyName(r.nominator_name)}`;
+
+    // jsPDF's built-in Helvetica is WinAnsi-encoded: emoji and other exotic
+    // codepoints render as garbage. Normalise smart punctuation to its ASCII
+    // equivalent and drop anything the font can't draw.
+    const pdfSafe = s => (s || '')
+      .replace(/[‘’]/g, "'")
+      .replace(/[“”]/g, '"')
+      .replace(/[–—]/g, '-')
+      .replace(/…/g, '...')
+      .replace(/[^\x20-\x7E\xA0-\xFF]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const escHtml = s => (s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const collapse = s => (s || '').replace(/\s+/g, ' ').trim();
+
+    const PDF_NAVY = [39, 46, 114], PDF_GOLD = [209, 65, 36];
+    const PDF_INK = [51, 65, 85], PDF_MUTED = [100, 116, 139];
+    const VALUE_RGB = {
+      'Innovation': [139, 92, 246], 'Integrity': [8, 145, 178], 'Hard Work': [220, 38, 38],
+      'Teamwork': [22, 163, 74], 'Passion': [234, 88, 12]
+    };
+    const VALUE_HEXC = {
+      'Innovation': '#8B5CF6', 'Integrity': '#0891B2', 'Hard Work': '#DC2626',
+      'Teamwork': '#16A34A', 'Passion': '#EA580C'
+    };
+
+    // Same-origin PNG → data URL, so jsPDF can embed it. Downscale first:
+    // jsPDF stores the bitmap at full resolution, and the posting gets emailed
+    // around, so a full-size logo would dominate the file.
+    const loadImageData = (src, maxW) => new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = maxW && img.naturalWidth > maxW ? maxW / img.naturalWidth : 1;
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.naturalWidth * scale);
+        c.height = Math.round(img.naturalHeight * scale);
+        const ctx = c.getContext('2d');
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, c.width, c.height);
+        resolve(c.toDataURL('image/png'));
+      };
+      img.onerror = () => reject(new Error('logo load failed'));
+      img.src = src;
+    });
+
+    function ExportTab() {
+      const [preset, setPreset] = useState('lastweek');
+      const [from, setFrom] = useState(() => fmtYMD(presetRange('lastweek')[0]));
+      const [to, setTo] = useState(() => fmtYMD(presetRange('lastweek')[1]));
+      const [recs, setRecs] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [busy, setBusy] = useState('');
+      const [status, setStatus] = useState('');
+
+      useEffect(() => {
+        if (preset === 'custom') return;
+        const [f, t] = presetRange(preset);
+        setFrom(fmtYMD(f)); setTo(fmtYMD(t));
+      }, [preset]);
+
+      useEffect(() => { load(); }, [from, to]);
+
+      const invalid = parseYMD(from) > parseYMD(to);
+
+      const load = async () => {
+        if (invalid) { setRecs([]); setLoading(false); return; }
+        setLoading(true); setStatus('');
+        const start = parseYMD(from);
+        const end = addDays(parseYMD(to), 1); // exclusive upper bound
+        const { data } = await supabase.from('recognitions').select('*, recognition_sites(name)')
+          .eq('approved', true)
+          .gte('created_at', start.toISOString())
+          .lt('created_at', end.toISOString())
+          .order('created_at', { ascending: true });
+        setRecs(data || []);
+        setLoading(false);
+      };
+
+      const subtitle = invalid ? '' : rangeLabel(parseYMD(from), parseYMD(to));
+      const fileBase = `Bracelet-Awards_${from}_to_${to}`;
+
+      const downloadPdf = async () => {
+        if (!recs.length) return;
+        setBusy('pdf'); setStatus('');
+        try {
+          const { jsPDF } = window.jspdf;
+          const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+          const PW = doc.internal.pageSize.getWidth();
+          const PH = doc.internal.pageSize.getHeight();
+          const M = 54, CW = PW - M * 2, BOTTOM = PH - 62;
+
+          let logo = null;
+          try { logo = await loadImageData('canyon-labs-logo-white.png', 276); } catch (_) { /* title alone is fine */ }
+
+          const titleBar = () => {
+            doc.setFillColor(...PDF_NAVY); doc.rect(0, 0, PW, 112, 'F');
+            doc.setFillColor(...PDF_GOLD); doc.rect(0, 112, PW, 4, 'F');
+            if (logo) doc.addImage(logo, 'PNG', M, 20, 92, 92 / 2.071, undefined, 'FAST');
+            doc.setTextColor(255, 255, 255);
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(18);
+            doc.text('Employee Achievement Bracelet Awards', M, 96);
+            doc.setTextColor(...PDF_NAVY);
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(12);
+            doc.text(pdfSafe(subtitle), M, 146);
+            return 178;
+          };
+
+          const contBar = () => {
+            doc.setFillColor(...PDF_NAVY); doc.rect(0, 0, PW, 34, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
+            doc.text('Employee Achievement Bracelet Awards', M, 22);
+            return 68;
+          };
+
+          // Lay each award out before drawing it, so a block never straddles a page.
+          const measure = r => {
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(14);
+            const nameLines = doc.splitTextToSize(pdfSafe(tidyName(r.recipient_name)) || '-', CW - 150);
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5);
+            const descLines = doc.splitTextToSize(pdfSafe(r.description), CW);
+            const h = (nameLines.length - 1) * 17 + 15 + 16 + (descLines.length - 1) * 14.5 + 18 + 24;
+            return { nameLines, descLines, h };
+          };
+
+          const draw = (r, m, y) => {
+            const pill = pdfSafe(r.core_value);
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
+            const pw = doc.getTextWidth(pill) + 20;
+            doc.setFillColor(...(VALUE_RGB[r.core_value] || PDF_MUTED));
+            doc.roundedRect(M + CW - pw, y - 11, pw, 16, 8, 8, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.text(pill, M + CW - pw + 10, y + 0.5);
+
+            doc.setTextColor(...PDF_NAVY);
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(14);
+            m.nameLines.forEach((ln, i) => doc.text(ln, M, y + i * 17));
+            let cy = y + (m.nameLines.length - 1) * 17 + 15;
+
+            doc.setTextColor(...PDF_MUTED);
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+            doc.text(pdfSafe(nominatorLine(r)), M, cy);
+            cy += 16;
+
+            doc.setTextColor(...PDF_INK); doc.setFontSize(10.5);
+            m.descLines.forEach((ln, i) => doc.text(ln, M, cy + i * 14.5));
+            cy += (m.descLines.length - 1) * 14.5 + 18;
+
+            doc.setDrawColor(226, 232, 240); doc.setLineWidth(0.7);
+            doc.line(M, cy, M + CW, cy);
+            return cy + 24;
+          };
+
+          let y = titleBar();
+          recs.forEach(r => {
+            const m = measure(r);
+            if (y + m.h > BOTTOM) { doc.addPage(); y = contBar(); }
+            y = draw(r, m, y);
+          });
+
+          const total = doc.internal.getNumberOfPages();
+          for (let i = 1; i <= total; i++) {
+            doc.setPage(i);
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+            doc.setTextColor(...PDF_MUTED);
+            doc.text('Canyon Labs  ·  Employee Achievement Bracelet Awards', M, PH - 34);
+            doc.text(`Page ${i} of ${total}`, PW - M, PH - 34, { align: 'right' });
+          }
+
+          doc.save(fileBase + '.pdf');
+          setStatus(`✓ Downloaded ${fileBase}.pdf — ${recs.length} award${recs.length !== 1 ? 's' : ''} over ${total} page${total !== 1 ? 's' : ''}.`);
+        } catch (e) {
+          console.error(e);
+          setStatus('⚠ ' + (e.message || 'PDF generation failed.'));
+        }
+        setBusy('');
+      };
+
+      // Table-based, fully inline-styled markup — Outlook strips stylesheets
+      // and ignores flexbox, so this is the layout that survives a paste.
+      const emailHtml = () => {
+        const blocks = recs.map(r => `
+      <tr><td style="padding:0 0 24px 0;">
+        <div style="font:700 16px 'Segoe UI',Arial,sans-serif;color:#272E72;">${escHtml(tidyName(r.recipient_name))}</div>
+        <div style="margin:6px 0 8px 0;">
+          <span style="background:${VALUE_HEXC[r.core_value] || '#64748B'};color:#ffffff;border-radius:11px;padding:3px 11px;font:700 11px 'Segoe UI',Arial,sans-serif;">${escHtml(r.core_value)}</span>
+          <span style="font:400 12px 'Segoe UI',Arial,sans-serif;color:#64748B;padding-left:8px;">${escHtml(nominatorLine(r))}</span>
+        </div>
+        <div style="font:400 14px/1.55 'Segoe UI',Arial,sans-serif;color:#334155;">${escHtml(collapse(r.description))}</div>
+      </td></tr>`).join('');
+        return `<table cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:640px;font-family:'Segoe UI',Arial,sans-serif;">
+  <tr><td style="border-bottom:3px solid #D14124;padding-bottom:10px;">
+    <div style="font:700 20px 'Segoe UI',Arial,sans-serif;color:#272E72;">Employee Achievement Bracelet Awards</div>
+    <div style="font:400 14px 'Segoe UI',Arial,sans-serif;color:#64748B;padding-top:4px;">${escHtml(subtitle)}</div>
+  </td></tr>
+  <tr><td style="height:22px;line-height:22px;">&nbsp;</td></tr>
+  ${blocks}
+  <tr><td style="border-top:1px solid #E2E8F0;padding-top:10px;font:400 12px 'Segoe UI',Arial,sans-serif;color:#64748B;">
+    Come see your site's recognition contact to pick up your bracelet. Congratulations, everyone!
+  </td></tr>
+</table>`;
+      };
+
+      const emailText = () => {
+        const head = `Employee Achievement Bracelet Awards\n${subtitle}\n\n`;
+        return head + recs.map(r =>
+          `${tidyName(r.recipient_name)}\nCore Value: ${r.core_value}\n${nominatorLine(r)}\n${collapse(r.description)}\n`
+        ).join('\n');
+      };
+
+      const copyEmail = async () => {
+        if (!recs.length) return;
+        setBusy('email'); setStatus('');
+        const html = emailHtml(), text = emailText();
+        const ok = () => setStatus('✓ Email body copied — paste straight into Outlook, then attach the PDF.');
+        try {
+          await navigator.clipboard.write([new ClipboardItem({
+            'text/html': new Blob([html], { type: 'text/html' }),
+            'text/plain': new Blob([text], { type: 'text/plain' })
+          })]);
+          ok();
+        } catch (_) {
+          // Older browsers have no ClipboardItem — copy a live selection instead.
+          try {
+            const holder = document.createElement('div');
+            holder.contentEditable = 'true';
+            holder.style.cssText = 'position:fixed;left:-9999px;top:0;';
+            holder.innerHTML = html;
+            document.body.appendChild(holder);
+            const range = document.createRange(); range.selectNodeContents(holder);
+            const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+            document.execCommand('copy');
+            sel.removeAllRanges(); document.body.removeChild(holder);
+            ok();
+          } catch (e) {
+            setStatus('⚠ Could not reach the clipboard — ' + (e.message || 'blocked by the browser') + '.');
+          }
+        }
+        setBusy('');
+      };
+
+      return (
+        <div>
+          <div className="card" style={{ marginBottom: 24 }}>
+            <h3 style={{ marginBottom: 8 }}>Weekly Bracelet Awards Posting</h3>
+            <p style={{ fontSize: 14, color: 'var(--canyon-muted)', marginBottom: 20 }}>
+              Pick a date range, then download the posting as a PDF to attach and copy the matching
+              email body to paste into Outlook. Everything submitted in the window is included —
+              nothing is trimmed.
+            </p>
+
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end', marginBottom: 16 }}>
+              <div>
+                <label className="form-label">Range</label>
+                <select className="form-select" value={preset} onChange={e => setPreset(e.target.value)} style={{ minWidth: 190 }}>
+                  <option value="lastweek">Last week (Mon–Sun)</option>
+                  <option value="thisweek">This week (Mon–today)</option>
+                  <option value="last2">Last 2 weeks</option>
+                  <option value="custom">Custom…</option>
+                </select>
+              </div>
+              <div>
+                <label className="form-label">From</label>
+                <input className="form-input" type="date" value={from}
+                  onChange={e => { setPreset('custom'); setFrom(e.target.value); }} style={{ minWidth: 150 }} />
+              </div>
+              <div>
+                <label className="form-label">To</label>
+                <input className="form-input" type="date" value={to}
+                  onChange={e => { setPreset('custom'); setTo(e.target.value); }} style={{ minWidth: 150 }} />
+              </div>
+            </div>
+
+            {invalid ? (
+              <p style={{ fontSize: 14, color: '#9D2235', fontWeight: 600, margin: 0 }}>
+                ⚠ The “From” date is after the “To” date.
+              </p>
+            ) : (
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                <button className="btn btn-primary" onClick={downloadPdf}
+                  disabled={loading || !!busy || recs.length === 0}>
+                  {busy === 'pdf' ? 'Building…' : `📄 Download PDF (${recs.length})`}
+                </button>
+                <button className="btn btn-gold" onClick={copyEmail}
+                  disabled={loading || !!busy || recs.length === 0}>
+                  {busy === 'email' ? 'Copying…' : '📧 Copy email body'}
+                </button>
+                <span style={{ fontSize: 13, color: 'var(--canyon-muted)' }}>{subtitle}</span>
+              </div>
+            )}
+
+            {status && <p style={{ fontSize: 14, marginTop: 16, marginBottom: 0, color: status[0] === '⚠' ? '#9D2235' : 'var(--canyon-navy)', fontWeight: 600 }}>{status}</p>}
+          </div>
+
+          <p style={{ fontSize: 14, color: 'var(--canyon-muted)', marginBottom: 16 }}>
+            {loading ? 'Loading…' : `Preview — ${recs.length} recognition${recs.length !== 1 ? 's' : ''} in range:`}
+          </p>
+          {!loading && recs.length === 0 && !invalid && (
+            <p style={{ color: 'var(--canyon-muted)', textAlign: 'center', padding: 32 }}>
+              No recognitions were submitted in this range.
+            </p>
+          )}
           <div className="rec-list">
             {recs.map(r => <RecCard key={r.id} rec={r} />)}
           </div>
