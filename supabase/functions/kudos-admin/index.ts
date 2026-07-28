@@ -66,42 +66,6 @@ Deno.serve(async (req) => {
       case "ping":
         return json(200, { ok: true });
 
-      case "loadModeration": {
-        const [pendingRes, approvedRes] = await Promise.all([
-          sb.from("recognitions").select("*, recognition_sites(name)")
-            .eq("approved", false).order("created_at", { ascending: false }),
-          sb.from("recognitions").select("*, recognition_sites(name)")
-            .eq("approved", true).order("created_at", { ascending: false })
-            .limit(50),
-        ]);
-        if (pendingRes.error) throw pendingRes.error;
-        if (approvedRes.error) throw approvedRes.error;
-        return json(200, {
-          pending: pendingRes.data ?? [],
-          approved: approvedRes.data ?? [],
-        });
-      }
-
-      case "approve": {
-        const { id } = payload;
-        if (!id) return json(400, { error: "Missing id" });
-        const { error } = await sb.from("recognitions")
-          .update({ approved: true }).eq("id", id);
-        if (error) throw error;
-        return json(200, { ok: true });
-      }
-
-      case "approveBulk": {
-        const { ids } = payload;
-        if (!Array.isArray(ids) || ids.length === 0) {
-          return json(400, { error: "Missing ids" });
-        }
-        const { error } = await sb.from("recognitions")
-          .update({ approved: true }).in("id", ids);
-        if (error) throw error;
-        return json(200, { ok: true, count: ids.length });
-      }
-
       case "deleteRec": {
         const { id } = payload;
         if (!id) return json(400, { error: "Missing id" });
@@ -114,7 +78,7 @@ Deno.serve(async (req) => {
         const [allRes, recentRes] = await Promise.all([
           sb.from("recognitions").select("id, core_value, created_at"),
           sb.from("recognitions").select("*, recognition_sites(name)")
-            .order("created_at", { ascending: false }).limit(5),
+            .order("created_at", { ascending: false }).limit(15),
         ]);
         if (allRes.error) throw allRes.error;
         if (recentRes.error) throw recentRes.error;
