@@ -123,19 +123,32 @@ const prefixMatch = (a: string, b: string) =>
  * otherwise split one person into two.
  */
 export function splitRecipients(raw: string): string[] {
-  const text = (raw || "").replace(/\s+/g, " ").trim();
+  // Collapse spaces and tabs but KEEP line breaks: a list pasted out of Teams
+  // or a document is one name per line, and flattening it first would hide
+  // everyone after the first.
+  let text = (raw || "").replace(/[^\S\n]+/g, " ").trim();
   if (!text) return [];
+
+  // "w/" means "with", i.e. another person. Without this the slash splits
+  // mid-phrase and leaves a stray "w" welded to the first name.
+  text = text.replace(/\s+w\/\s*/gi, " and ");
 
   const parts = text
     .split(/\s*[,;\/]\s*|\s+(?:and|&|\+)\s+|\n+/i)
-    .map((p) => p.trim())
+    // "A, B, and C" — the comma branch consumes the comma first, stranding the
+    // conjunction on the front of the last name ("and Alexis Au").
+    .map((p) => p.trim().replace(/^(?:and|&|\+)\s+/i, "").trim())
     .filter(Boolean);
 
   if (parts.length < 2) return [text];
 
-  // "Smith, John" — two comma-separated single words is a reversed single
-  // name far more often than it is two people who both go by one name.
-  if (parts.length === 2 && parts.every((p) => p.split(/\s+/).length === 1) &&
+  // "Smith, John" is one person written surname-first. "Tanner and Eleesa" is
+  // two colleagues who each go by a single name — and both of those are real
+  // nominations here. Only the comma form can be a reversed name, so a
+  // conjunction anywhere in the text rules the guard out.
+  const commaOnly = !/\s(?:and|&|\+)\s|[;\/\n]/i.test(text);
+  if (commaOnly && parts.length === 2 &&
+      parts.every((p) => p.split(" ").length === 1) &&
       !parts.some(isEmail)) {
     return [text];
   }

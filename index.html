@@ -518,23 +518,41 @@
     // ═══════════════════════════════════════════════════════════
     // RECOGNITION FEED
     // ═══════════════════════════════════════════════════════════
+    const FEED_PAGE_SIZE = 50;
+
     function FeedPage({ sites }) {
       const [recs, setRecs] = useState([]);
       const [filter, setFilter] = useState({ value: '', site: '' });
       const [loading, setLoading] = useState(true);
+      const [loadingMore, setLoadingMore] = useState(false);
+      const [total, setTotal] = useState(null);
+      const [loadError, setLoadError] = useState('');
 
-      useEffect(() => {
-        loadRecs();
-      }, [filter]);
+      useEffect(() => { loadRecs(0); }, [filter]);
 
-      const loadRecs = async () => {
-        setLoading(true);
-        let q = supabase.from('recognitions').select('*, recognition_sites(name)').eq('approved', true).order('created_at', { ascending: false }).limit(50);
+      // Paged rather than capped. The cap silently hid every recognition past
+      // the 50th — a person checking whether their kudos was posted saw
+      // nothing and no explanation.
+      const loadRecs = async (offset) => {
+        offset === 0 ? setLoading(true) : setLoadingMore(true);
+        setLoadError('');
+        let q = supabase.from('recognitions')
+          .select('*, recognition_sites(name)', { count: 'exact' })
+          .eq('approved', true)
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false })          // stable tiebreak so paging can't skip a row
+          .range(offset, offset + FEED_PAGE_SIZE - 1);
         if (filter.value) q = q.eq('core_value', filter.value);
         if (filter.site) q = q.eq('site_id', filter.site);
-        const { data } = await q;
-        setRecs(data || []);
-        setLoading(false);
+        const { data, error, count } = await q;
+        if (error) {
+          // Never render a failed query as an empty feed.
+          setLoadError('Could not load recognitions — ' + (error.message || 'please retry.'));
+        } else {
+          setRecs(prev => offset === 0 ? (data || []) : [...prev, ...(data || [])]);
+          if (typeof count === 'number') setTotal(count);
+        }
+        setLoading(false); setLoadingMore(false);
       };
 
       return (
@@ -554,13 +572,41 @@
             <button className="btn btn-secondary btn-sm" onClick={() => window.print()} title="Print recognitions">🖨️ Print</button>
           </div>
 
-          {loading ? <p style={{color:'var(--canyon-muted)'}}>Loading...</p> : (
-            <div className="rec-list">
-              {recs.length === 0 && <p style={{color:'var(--canyon-muted)'}}>No recognitions yet. Be the first to recognize a colleague!</p>}
-              {recs.map(r => (
-                <RecCard key={r.id} rec={r} />
-              ))}
-            </div>
+          {loadError && (
+            <p style={{ color: '#9D2235', fontWeight: 600 }}>
+              ⚠ {loadError}{' '}
+              <button className="btn btn-sm" onClick={() => loadRecs(0)} style={{ marginLeft: 8 }}>Retry</button>
+            </p>
+          )}
+
+          {loading ? <p style={{color:'var(--canyon-muted)'}}>Loading...</p> : !loadError && (
+            <>
+              <div className="rec-list">
+                {recs.length === 0 && (
+                  <p style={{color:'var(--canyon-muted)'}}>
+                    {filter.value || filter.site
+                      ? 'No recognitions match this filter.'
+                      : 'No recognitions yet. Be the first to recognize a colleague!'}
+                  </p>
+                )}
+                {recs.map(r => (
+                  <RecCard key={r.id} rec={r} />
+                ))}
+              </div>
+
+              {total !== null && recs.length > 0 && (
+                <div className="no-print" style={{ textAlign: 'center', marginTop: 24 }}>
+                  <p style={{ fontSize: 13, color: 'var(--canyon-muted)', marginBottom: 10 }}>
+                    Showing {recs.length} of {total}
+                  </p>
+                  {recs.length < total && (
+                    <button className="btn btn-secondary" onClick={() => loadRecs(recs.length)} disabled={loadingMore}>
+                      {loadingMore ? 'Loading…' : `Show more (${total - recs.length} left)`}
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
           )}
 
           {/* Print-only view */}
@@ -1323,10 +1369,15 @@
 
         if (drawMode === 'wheel') {
           const segAngle = 360 / entries.length;
-          // Pointer is at top. We want the winner segment centered there.
-          const targetAngle = 360 - (idx * segAngle + segAngle / 2);
+          // Canvas arc() starts at 3 o'clock and runs clockwise, so segment i's
+          // centre sits at (i + 0.5) * segAngle from there. The pointer is at
+          // 12 o'clock, i.e. 270°, so that is what the winner has to land on —
+          // the old 360-based value parked the winner at 3 o'clock and the room
+          // watched the wrong name stop under the arrow.
+          const targetAngle = 270 - (idx * segAngle + segAngle / 2);
           const extraSpins = (6 + Math.floor(Math.random() * 4)) * 360;
-          setRotation(rotation + extraSpins + targetAngle - (rotation % 360));
+          const norm = ((targetAngle % 360) + 360) % 360;
+          setRotation(rotation + extraSpins + norm - (rotation % 360));
           setTimeout(() => reveal(picked), 5200);
         }
         // Grid mode reveals itself via HighlightGrid's onSettled.
@@ -1787,12 +1838,23 @@
 
       const loadRecs = async () => {
         setLoading(true);
-        const since = new Date(Date.now() - weeks * 7 * 86400000).toISOString();
+        // Anchored to the start of a day, not to the instant of the click. The
+        // rolling cutoff meant the same export included or excluded a real
+        // person depending on what time of day it was run, and disagreed with
+        // the PDF/email window which is calendar-day based.
+        const start = new Date(); start.setHours(0, 0, 0, 0);
+        start.setDate(start.getDate() - weeks * 7 + 1);
         const q = supabase.from('recognitions').select('*, recognition_sites(name)')
-          .eq('approved', true).gte('created_at', since).order('created_at', { ascending: false });
-        const { data } = await q;
-        setRecs(data || []);
-        setStatus('');
+          .eq('approved', true).gte('created_at', start.toISOString())
+          .order('created_at', { ascending: false });
+        const { data, error } = await q;
+        if (error) {
+          setRecs([]);
+          setStatus('⚠ Could not load recognitions — ' + (error.message || 'please retry.'));
+        } else {
+          setRecs(data || []);
+          setStatus('');
+        }
         setLoading(false);
       };
 
@@ -1835,15 +1897,17 @@
         return lo;
       };
 
-      // Drop whole names (never half a name) if even the wide card can't hold them.
-      const fitNames = (name, boxW, maxLines, pt) => {
-        if (estW(name, pt, true) <= boxW * maxLines * 0.94) return name;
-        const parts = (name || '').split(/\s*,\s*/).filter(Boolean);
-        for (let keep = parts.length - 1; keep >= 1; keep--) {
-          const s = parts.slice(0, keep).join(', ') + ` +${parts.length - keep} more`;
-          if (estW(s, pt, true) <= boxW * maxLines * 0.94) return s;
+      // Never drop a name. A person who was recognised by a colleague and then
+      // silently replaced by "+3 more" on the projector is the worst outcome
+      // this deck can produce, so an over-long group shrinks instead — right
+      // down to NAME_MIN_PT, and past that it simply runs small rather than
+      // losing anybody.
+      const NAME_MIN_PT = 7;
+      const fitNamePt = (name, boxW, maxLines, startPt) => {
+        for (let pt = startPt; pt > NAME_MIN_PT; pt -= 0.5) {
+          if (estW(name, pt, true) <= boxW * maxLines * 0.94) return pt;
         }
-        return name;
+        return NAME_MIN_PT;
       };
 
       // Flow the cards into pages: half-width cards pair up, and a recognition
@@ -1926,9 +1990,10 @@
 
               const nameX = cx + 0.62, innerX = cx + 0.3, innerW = cw - 0.6;
               const nw = nameBoxW(cw), nameH = c.wide ? 0.62 : 0.4;
-              const namePt = fitPt(c.nm, nw, 2, 15, c.wide ? 10 : 11);
+              // Shrink until every name fits rather than trimming the list.
+              const namePt = fitNamePt(c.nm, nw, 2, fitPt(c.nm, nw, 2, 15, c.wide ? 10 : 11));
               // recipient (leave room for the value pill on the right)
-              slide.addText(fitNames(c.nm, nw, 2, namePt), { x: nameX, y: cy + 0.18, w: nw, h: nameH, fontFace: 'Arial', fontSize: namePt, bold: true, color: NAVY, valign: 'middle', margin: 0 });
+              slide.addText(tidyName(c.nm), { x: nameX, y: cy + 0.18, w: nw, h: nameH, fontFace: 'Arial', fontSize: namePt, bold: true, color: NAVY, valign: 'middle', margin: 0 });
               // value pill
               slide.addShape(pptx.ShapeType.roundRect, { x: cx + cw - PILL_W - 0.24, y: cy + 0.22, w: PILL_W, h: PILL_H, rectRadius: 0.16, fill: { color: vhex } });
               slide.addText((r.core_value || '').toUpperCase(), { x: cx + cw - PILL_W - 0.24, y: cy + 0.22, w: PILL_W, h: PILL_H, align: 'center', valign: 'middle', fontFace: 'Arial', fontSize: 8.5, bold: true, color: 'FFFFFF', margin: 0 });
@@ -1972,6 +2037,10 @@
                   <option value={2}>Last 2 weeks</option>
                   <option value={4}>Last 4 weeks</option>
                   <option value={8}>Last 8 weeks</option>
+                  {/* A quarter is 13 weeks; without these a quarterly recap
+                      deck could not reach its own first month. */}
+                  <option value={13}>Last quarter (13 weeks)</option>
+                  <option value={26}>Last 26 weeks</option>
                 </select>
               </div>
               <button className="btn btn-primary" onClick={generatePptx} disabled={loading || generating || recs.length === 0}>
@@ -2186,19 +2255,38 @@
         setBusy('');
       };
 
-      const invalid = parseYMD(from) > parseYMD(to);
+      // A cleared date input yields an Invalid Date, and NaN comparisons are
+      // false — so without the isNaN check the guard passes and load() throws
+      // on toISOString, freezing the tab on "Loading…".
+      const badDate = s => !s || isNaN(parseYMD(s).getTime());
+      const invalid = badDate(from) || badDate(to) || parseYMD(from) > parseYMD(to);
+
+      // Guards against a slow earlier request landing after a newer one and
+      // repopulating recs with the wrong range while the header, the filename
+      // and the "mark as posted" range all describe the new one.
+      const loadSeq = useRef(0);
 
       const load = async () => {
         if (invalid) { setRecs([]); setLoading(false); return; }
+        const seq = ++loadSeq.current;
         setLoading(true); setStatus('');
         const start = parseYMD(from);
         const end = addDays(parseYMD(to), 1); // exclusive upper bound
-        const { data } = await supabase.from('recognitions').select('*, recognition_sites(name)')
+        const { data, error } = await supabase.from('recognitions').select('*, recognition_sites(name)')
           .eq('approved', true)
           .gte('created_at', start.toISOString())
           .lt('created_at', end.toISOString())
           .order('created_at', { ascending: true });
-        setRecs(data || []);
+        if (seq !== loadSeq.current) return;   // a newer request already answered
+        if (error) {
+          // An empty result and a failed query look identical on screen, and
+          // one of them means a whole week silently goes unposted.
+          setRecs([]);
+          setStatus('⚠ Could not load this range — ' + (error.message || 'please retry.') +
+                    ' Do not post until this loads: the range may not be empty.');
+        } else {
+          setRecs(data || []);
+        }
         setLoading(false);
       };
 
