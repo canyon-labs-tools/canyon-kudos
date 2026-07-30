@@ -207,6 +207,26 @@
                                border-radius: 6px; cursor: pointer; }
     .draw-mode-toggle button.on { background: rgba(255,255,255,0.9); color: #272E72; font-weight: 700; }
 
+    /* On-screen posting — the same content as the PDF/email, sized to be read
+       from across a room and to print cleanly straight from the browser. */
+    .onscreen-view { position: fixed; inset: 0; z-index: 200; background: #fff; display: flex; flex-direction: column; animation: fadeIn 0.25s; }
+    .onscreen-head { background: linear-gradient(120deg, #272E72, #5F295E); color: #fff; padding: 22px 40px;
+                     display: flex; align-items: center; justify-content: space-between; gap: 20px;
+                     border-bottom: 4px solid #D14124; }
+    .onscreen-head h1 { font-size: 26px; font-weight: 800; margin: 0; }
+    .onscreen-head p { font-size: 14px; color: rgba(255,255,255,0.72); margin: 4px 0 0 0; }
+    .onscreen-body { flex: 1; overflow: auto; padding: 28px 40px 48px;
+                     display: grid; grid-template-columns: repeat(auto-fill, minmax(390px, 1fr)); gap: 18px; align-content: start; }
+    .onscreen-card { border: 1px solid #e2e8f0; border-left: 4px solid #D14124; border-radius: 10px; padding: 16px 18px; break-inside: avoid; }
+    .onscreen-name { font-size: 19px; font-weight: 800; color: var(--canyon-navy); margin-bottom: 8px; }
+    .onscreen-meta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 12px; color: var(--canyon-muted); margin-bottom: 10px; }
+    .onscreen-desc { font-size: 14px; line-height: 1.55; color: #334155; }
+    @media print {
+      .onscreen-view { position: static; }
+      .onscreen-head { background: #272E72 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .onscreen-head .btn { display: none; }
+    }
+
     /* Print styles */
     .print-card { border: 2px solid #e2e8f0; border-radius: 12px; padding: 32px; margin-bottom: 24px; page-break-inside: avoid; border-left: 6px solid var(--accent); }
     .print-card .rec-recipient { font-size: 22px; }
@@ -1987,6 +2007,58 @@
     const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
     const ordinal = n => { const s = ['th','st','nd','rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
 
+    // Coverage strip for the weekly posting. The Mon–Sun arithmetic is sound,
+    // but two operational mistakes are invisible without a record: posting
+    // "This week" mid-week and then "Last week" on Monday sends the same days
+    // twice, and missing a Monday loses seven days with nobody the wiser.
+    function PostingCoverage({ postings, from, to, weeks = 10 }) {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const thisMon = mondayOf(today);
+      const covered = (s, e) => postings.some(p =>
+        p.range_start <= fmtYMD(s) && p.range_end >= fmtYMD(e));
+      const partly = (s, e) => postings.some(p =>
+        p.range_start <= fmtYMD(e) && p.range_end >= fmtYMD(s));
+
+      const cells = [];
+      for (let i = weeks - 1; i >= 0; i--) {
+        const s = addDays(thisMon, -7 * i);
+        const e = addDays(s, 6);
+        const isThis = i === 0;
+        const full = covered(s, e), some = !full && partly(s, e);
+        // Only completed weeks count as a gap; the current one isn't due yet.
+        const gap = !full && !some && !isThis;
+        const selected = from <= fmtYMD(e) && to >= fmtYMD(s);
+        cells.push({ s, e, full, some, gap, isThis, selected });
+      }
+      const gaps = cells.filter(c => c.gap).length;
+
+      return (
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {cells.map((c, i) => (
+              <div key={i}
+                title={`${fmtYMD(c.s)} – ${fmtYMD(c.e)}\n${c.full ? 'Posted' : c.some ? 'Partly posted' : c.isThis ? 'Current week' : 'Not posted'}`}
+                style={{
+                  flex: 1, height: 34, borderRadius: 6, display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', fontSize: 10, fontWeight: 700, cursor: 'help',
+                  background: c.full ? '#dcfce7' : c.some ? '#fef3c7' : c.gap ? '#fee2e2' : '#f1f5f9',
+                  color: c.full ? '#166534' : c.some ? '#92400e' : c.gap ? '#9D2235' : 'var(--canyon-muted)',
+                  outline: c.selected ? '2px solid var(--canyon-purple)' : 'none',
+                  outlineOffset: -2,
+                }}>
+                {c.full ? '✓' : c.some ? '◐' : c.gap ? '!' : '·'}
+              </div>
+            ))}
+          </div>
+          <p style={{ fontSize: 12, color: gaps ? '#9D2235' : 'var(--canyon-muted)', marginTop: 6, marginBottom: 0 }}>
+            {gaps
+              ? `⚠ ${gaps} week${gaps !== 1 ? 's' : ''} in the last ${weeks} never posted — hover to see which.`
+              : `Last ${weeks} weeks · ✓ posted · ◐ partly · · current week`}
+          </p>
+        </div>
+      );
+    }
+
     const presetRange = p => {
       const today = new Date(); today.setHours(0, 0, 0, 0);
       const thisMon = mondayOf(today);
@@ -2074,6 +2146,8 @@
       const [loading, setLoading] = useState(true);
       const [busy, setBusy] = useState('');
       const [status, setStatus] = useState('');
+      const [postings, setPostings] = useState([]);
+      const [onScreen, setOnScreen] = useState(false);
 
       useEffect(() => {
         if (preset === 'custom') return;
@@ -2082,6 +2156,35 @@
       }, [preset]);
 
       useEffect(() => { load(); }, [from, to]);
+      useEffect(() => { loadPostings(); }, []);
+
+      const loadPostings = async () => {
+        try {
+          const { postings } = await adminCall('loadPostings');
+          setPostings(postings || []);
+        } catch (e) { if (!e.unauthorized) console.error(e); }
+      };
+
+      // Any previously posted range touching this one means days would go out
+      // a second time.
+      const overlapping = postings.filter(p => p.range_start <= to && p.range_end >= from);
+      const alreadyPosted = overlapping.some(p => p.range_start <= from && p.range_end >= to);
+
+      const markPosted = async () => {
+        setBusy('mark');
+        try {
+          await adminCall('insertPosting', {
+            range_start: from, range_end: to,
+            recognition_count: recs.length,
+            note: subtitle,
+          });
+          await loadPostings();
+          setStatus(`✓ Marked ${from} – ${to} as posted.`);
+        } catch (e) {
+          if (!e.unauthorized) setStatus('⚠ ' + (e.message || 'Could not record the posting.'));
+        }
+        setBusy('');
+      };
 
       const invalid = parseYMD(from) > parseYMD(to);
 
@@ -2262,6 +2365,40 @@
         setBusy('');
       };
 
+      // A readable, projectable rendering of exactly the selected range,
+      // inside the app — the posting is often wanted on a screen in a meeting
+      // rather than as a file to attach.
+      if (onScreen) {
+        return (
+          <div className="onscreen-view">
+            <div className="onscreen-head">
+              <div>
+                <h1>Employee Achievement Bracelet Awards</h1>
+                <p>{subtitle} · {recs.length} recognition{recs.length !== 1 ? 's' : ''}</p>
+              </div>
+              <button className="btn" onClick={() => setOnScreen(false)}
+                style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none' }}>Close</button>
+            </div>
+            <div className="onscreen-body">
+              {recs.map(r => (
+                <div key={r.id} className="onscreen-card">
+                  <div className="onscreen-name">{tidyName(r.recipient_name)}</div>
+                  <div className="onscreen-meta">
+                    <span className={'value-pill ' + VALUE_CLASS(r.core_value)}
+                      style={{ padding: '3px 12px', fontSize: 12 }}>
+                      {VALUE_ICONS[r.core_value]} {r.core_value}
+                    </span>
+                    <span>{nominatorLine(r)}</span>
+                    <span>{new Date(r.created_at).toLocaleDateString()}</span>
+                  </div>
+                  <div className="onscreen-desc">{collapse(r.description)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      }
+
       return (
         <div>
           <div className="card" style={{ marginBottom: 24 }}>
@@ -2294,22 +2431,45 @@
               </div>
             </div>
 
+            <PostingCoverage postings={postings} from={from} to={to} />
+
             {invalid ? (
               <p style={{ fontSize: 14, color: '#9D2235', fontWeight: 600, margin: 0 }}>
                 ⚠ The “From” date is after the “To” date.
               </p>
             ) : (
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                <button className="btn btn-primary" onClick={downloadPdf}
-                  disabled={loading || !!busy || recs.length === 0}>
-                  {busy === 'pdf' ? 'Building…' : `📄 Download PDF (${recs.length})`}
-                </button>
-                <button className="btn btn-gold" onClick={copyEmail}
-                  disabled={loading || !!busy || recs.length === 0}>
-                  {busy === 'email' ? 'Copying…' : '📧 Copy email body'}
-                </button>
-                <span style={{ fontSize: 13, color: 'var(--canyon-muted)' }}>{subtitle}</span>
-              </div>
+              <>
+                {overlapping.length > 0 && (
+                  <p style={{ fontSize: 13, color: '#92400e', background: '#fef3c7', border: '1px solid #fde68a',
+                              borderRadius: 8, padding: '10px 12px', marginBottom: 14, fontWeight: 600 }}>
+                    {alreadyPosted
+                      ? `⚠ This exact range was already posted on ${new Date(overlapping[0].posted_at).toLocaleDateString()} — sending it again would repeat those recognitions.`
+                      : `⚠ Overlaps a posting already sent (${overlapping[0].range_start} – ${overlapping[0].range_end}). Those days would go out twice.`}
+                  </p>
+                )}
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <button className="btn btn-primary" onClick={downloadPdf}
+                    disabled={loading || !!busy || recs.length === 0}>
+                    {busy === 'pdf' ? 'Building…' : `📄 Download PDF (${recs.length})`}
+                  </button>
+                  <button className="btn btn-gold" onClick={copyEmail}
+                    disabled={loading || !!busy || recs.length === 0}>
+                    {busy === 'email' ? 'Copying…' : '📧 Copy email body'}
+                  </button>
+                  <button className="btn" onClick={() => setOnScreen(true)}
+                    disabled={loading || recs.length === 0}
+                    style={{ background: '#f1f5f9', color: 'var(--canyon-navy)', fontWeight: 600 }}>
+                    🖥️ Show on screen
+                  </button>
+                  <button className="btn" onClick={markPosted}
+                    disabled={loading || !!busy || recs.length === 0 || alreadyPosted}
+                    style={{ background: alreadyPosted ? '#dcfce7' : '#fff', color: alreadyPosted ? '#166534' : 'var(--canyon-navy)',
+                             border: '1px solid #cbd5e1', fontWeight: 600 }}>
+                    {alreadyPosted ? '✓ Recorded as posted' : busy === 'mark' ? 'Recording…' : 'Mark as posted'}
+                  </button>
+                  <span style={{ fontSize: 13, color: 'var(--canyon-muted)' }}>{subtitle}</span>
+                </div>
+              </>
             )}
 
             {status && <p style={{ fontSize: 14, marginTop: 16, marginBottom: 0, color: status[0] === '⚠' ? '#9D2235' : 'var(--canyon-navy)', fontWeight: 600 }}>{status}</p>}

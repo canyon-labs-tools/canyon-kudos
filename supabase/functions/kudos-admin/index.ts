@@ -177,6 +177,33 @@ Deno.serve(async (req) => {
         return json(200, { ok: true });
       }
 
+      case "loadPostings": {
+        const { data, error } = await sb.from("kudos_postings")
+          .select("*").order("range_start", { ascending: false }).limit(60);
+        if (error) throw error;
+        return json(200, { postings: data ?? [] });
+      }
+
+      // Written only when an admin confirms a posting went out, so trying an
+      // export does not make the week look covered.
+      case "insertPosting": {
+        const { range_start, range_end, recognition_count, note } = payload;
+        if (!range_start || !range_end) {
+          return json(400, { error: "Missing range_start or range_end" });
+        }
+        if (range_end < range_start) {
+          return json(400, { error: "range_end is before range_start" });
+        }
+        const { error } = await sb.from("kudos_postings").insert({
+          range_start,
+          range_end,
+          recognition_count: recognition_count ?? null,
+          note: note ?? null,
+        });
+        if (error) throw error;
+        return json(200, { ok: true });
+      }
+
       case "updateSetting": {
         const { key, value } = payload;
         if (!key || key === "admin_password") {
