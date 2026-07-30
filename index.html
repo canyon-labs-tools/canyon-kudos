@@ -981,9 +981,76 @@
     const SITE_ORDER = ['ROC', 'SLC', 'Remote', 'SD'];
     const SITES_KEY = 'canyon_kudos_draw_sites';
 
+    const SITE_SHORT = { ROC: 'Roch', SLC: 'SLC', Remote: 'Remote', SD: 'SD' };
+
     const siteLabel = s => SITE_LABELS[s] || s;
+    const siteShort = s => SITE_SHORT[s] || s;
     const sitesLabel = list =>
       list.length === 0 ? 'No sites selected' : list.map(siteLabel).join(' + ');
+
+    // At-a-glance record of which quarters have been drawn. The question this
+    // answers is "has Q3 been done yet?", asked by someone who did not run it.
+    function DrawingCalendar({ drawings }) {
+      const now = new Date();
+      const thisYear = now.getFullYear();
+      const thisQ = Math.floor(now.getMonth() / 3) + 1;
+
+      const byQuarter = {};
+      for (const d of drawings) {
+        (byQuarter[d.quarter] ??= []).push(d);
+      }
+
+      const years = [...new Set([
+        thisYear,
+        ...Object.keys(byQuarter).map(q => parseInt(q.split('-Q')[0])).filter(Boolean),
+      ])].sort((a, b) => b - a);
+
+      return (
+        <div style={{ marginBottom: 24 }}>
+          {years.map(year => (
+            <div key={year} style={{ display: 'flex', alignItems: 'stretch', gap: 8, marginBottom: 8 }}>
+              <div style={{ width: 46, display: 'flex', alignItems: 'center', fontWeight: 700,
+                            fontSize: 14, color: 'var(--canyon-muted)' }}>{year}</div>
+              {[1, 2, 3, 4].map(q => {
+                const key = `${year}-Q${q}`;
+                const done = byQuarter[key] || [];
+                const isCurrent = year === thisYear && q === thisQ;
+                const future = year > thisYear || (year === thisYear && q > thisQ);
+                // Fixed order so the same pair of sites always reads the same
+                // way, whichever meeting happened to be spun first.
+                const sites = [...new Set(done.flatMap(d => d.sites || []))]
+                  .sort((a, b) => SITE_ORDER.indexOf(a) - SITE_ORDER.indexOf(b));
+                return (
+                  <div key={q} title={done.length
+                        ? done.map(d => `${d.winner_name} — ${sitesLabel(d.sites || [])} — ${new Date(d.drawn_at).toLocaleDateString()}`).join('\n')
+                        : future ? 'Not yet' : 'No drawing recorded'}
+                    style={{
+                      flex: 1, padding: '10px 6px', borderRadius: 8, textAlign: 'center',
+                      background: done.length ? '#f0fdf4' : future ? '#fafafa' : '#fff',
+                      border: isCurrent ? '2px solid var(--canyon-purple)'
+                            : done.length ? '1px solid #bbf7d0' : '1px dashed #e2e8f0',
+                      opacity: future && !done.length ? 0.5 : 1,
+                      cursor: done.length ? 'help' : 'default',
+                    }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: done.length ? '#166534' : 'var(--canyon-muted)' }}>
+                      Q{q}
+                    </div>
+                    <div style={{ fontSize: 16, lineHeight: '20px', color: '#16a34a' }}>
+                      {done.length ? '✓' : <span style={{ color: '#cbd5e1' }}>·</span>}
+                    </div>
+                    {sites.length > 0 && (
+                      <div style={{ fontSize: 10, color: '#166534', fontWeight: 600 }}>
+                        {sites.map(siteShort).join(' · ')}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      );
+    }
     // Only sites that map onto a wheel. Someone based anywhere else has to be
     // pointed at whichever meeting they will actually attend.
     const ASSIGNABLE = ['ROC', 'SLC', 'Remote', 'EXCLUDE'];
@@ -1325,6 +1392,9 @@
               <p style={{ fontSize: 12, color: 'var(--canyon-muted)', marginBottom: 16 }}>
                 Finalized results only — practice spins aren't recorded.
               </p>
+
+              <DrawingCalendar drawings={pastDrawings} />
+
               {pastDrawings.length === 0 ? (
                 <p style={{ color: 'var(--canyon-muted)', fontSize: 14 }}>No drawings recorded yet.</p>
               ) : (
