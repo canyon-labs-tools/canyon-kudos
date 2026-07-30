@@ -195,6 +195,27 @@ export function buildIndex(roster: RosterEntry[]): Index {
 const only = (xs: RosterEntry[] | undefined) =>
   xs && xs.length === 1 ? xs[0] : null;
 
+/** The name in front of the @, e.g. steve.greene@ -> "steve". */
+function emailNick(e: RosterEntry): string {
+  if (!e.work_email) return "";
+  return norm(e.work_email).split("@")[0].split(/[._-]/)[0];
+}
+
+/**
+ * Does the given name the nomination used point at this roster row?
+ *
+ * Covers the shortening the roster does not carry ("Dan" for Daniel) and the
+ * nickname only the email address knows ("Steve" for Stephen) — the roster
+ * holds legal names, so without the second one Stephen Greene is only
+ * reachable if somebody types "Stephen".
+ */
+function firstNameMatches(first: string, e: RosterEntry): boolean {
+  const rosterFirst = tokens(e.full_name)[0] ?? "";
+  if (prefixMatch(first, rosterFirst)) return true;
+  const nick = emailNick(e);
+  return !!nick && prefixMatch(first, nick);
+}
+
 export function matchPerson(
   rawName: string,
   ix: Index,
@@ -226,7 +247,7 @@ export function matchPerson(
   // Same surname, and the given name is a shortening of the roster's.
   const sameLast = ix.byLast.get(last) ?? [];
   if (sameLast.length) {
-    const byFirst = sameLast.filter((e) => prefixMatch(first, tokens(e.full_name)[0]));
+    const byFirst = sameLast.filter((e) => firstNameMatches(first, e));
     const hit = only(byFirst);
     if (hit) return { entry: hit, confidence: "likely" };
     if (byFirst.length > 1) return { entry: null, confidence: "none" };
@@ -250,15 +271,34 @@ export function matchPerson(
     return { entry: null, confidence: "none" };
   }
 
-  // Typo in the surname, same initial. Deliberately last.
+  // Typo in the surname. Deliberately last.
   const fuzzy = ix.all.filter((e) => {
     const rt = tokens(e.full_name);
-    return withinOneEdit(last, rt[rt.length - 1]) && prefixMatch(first, rt[0]);
+    return withinOneEdit(last, rt[rt.length - 1]) && firstNameMatches(first, e);
   });
   const fuzzyHit = only(fuzzy);
   if (fuzzyHit) return { entry: fuzzyHit, confidence: "fuzzy" };
 
+  // "Greene, Steve" — surname first. Only tried once everything else has
+  // failed, so a genuine two-word name is never reinterpreted.
+  if (t.length === 2) {
+    const swapped = matchSwapped(t[1], t[0], ix);
+    if (swapped) return { entry: swapped, confidence: "fuzzy" };
+  }
+
   return { entry: null, confidence: "none" };
+}
+
+/** Second pass for a name written surname-first. */
+function matchSwapped(
+  first: string,
+  last: string,
+  ix: Index,
+): RosterEntry | null {
+  const exact = only(ix.byFull.get(`${first} ${last}`));
+  if (exact) return exact;
+  const sameLast = ix.byLast.get(last) ?? [];
+  return only(sameLast.filter((e) => firstNameMatches(first, e)));
 }
 
 // ── pool assembly ─────────────────────────────────────────────────────────

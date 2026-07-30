@@ -1047,13 +1047,13 @@
       // Anyone the roster match could not place. They are on no wheel until
       // an admin says where they belong, so nobody is silently dropped.
       const unplaced = pool.filter(p => !p.site);
-      // Offer a checkbox for every site we know about plus any the pool turned
-      // up, so a site nobody anticipated still gets a way onto a wheel.
-      const availableSites = [...new Set([
-        ...SITE_ORDER,
-        ...pool.map(p => p.site).filter(Boolean),
-      ])];
       const countAt = s => pool.filter(p => p.site === s).length;
+      // Only sites with someone to draw. A site with nobody nominated this
+      // quarter is not a choice to make, it is noise. A site that turns up in
+      // the pool gets a checkbox whether or not we anticipated it, and a
+      // ticked site stays visible so unticking it is always possible.
+      const availableSites = [...new Set([...SITE_ORDER, ...pool.map(p => p.site).filter(Boolean)])]
+        .filter(s => countAt(s) > 0 || selectedSites.includes(s));
 
       const toggleSite = (s) => {
         const next = selectedSites.includes(s)
@@ -1246,7 +1246,6 @@
                         border: on ? '2px solid var(--canyon-purple)' : '2px solid #e2e8f0',
                         background: on ? '#faf5ff' : '#fff',
                         fontWeight: on ? 600 : 400,
-                        opacity: n === 0 ? 0.5 : 1,
                       }}>
                         <input type="checkbox" checked={on} onChange={() => toggleSite(s)}
                           style={{ width: 16, height: 16, accentColor: 'var(--canyon-purple)', cursor: 'pointer' }} />
