@@ -94,18 +94,28 @@ Deno.serve(async (req) => {
           .select(
             "*, recognitions:winner_recognition_id(recipient_name, core_value)",
           )
-          .order("drawn_at", { ascending: false }).limit(10);
+          .order("drawn_at", { ascending: false }).limit(50);
         if (error) throw error;
         return json(200, { drawings: data ?? [] });
       }
 
+      // Called only when an admin finalises a result. Spinning the wheel to
+      // try it out records nothing, so the history stays a list of the draws
+      // that actually counted.
       case "insertDrawing": {
-        const { quarter, winner_recognition_id, notes } = payload;
-        if (!quarter || !winner_recognition_id) {
-          return json(400, { error: "Missing quarter or winner_recognition_id" });
+        const { quarter, winner_recognition_id, winner_name, sites, pool_size, notes } =
+          payload;
+        if (!quarter || !winner_name) {
+          return json(400, { error: "Missing quarter or winner_name" });
         }
-        const { error } = await sb.from("recognition_drawings")
-          .insert({ quarter, winner_recognition_id, notes });
+        const { error } = await sb.from("recognition_drawings").insert({
+          quarter,
+          winner_recognition_id: winner_recognition_id ?? null,
+          winner_name,
+          sites: Array.isArray(sites) ? sites : null,
+          pool_size: pool_size ?? null,
+          notes: notes ?? null,
+        });
         if (error) throw error;
         return json(200, { ok: true });
       }

@@ -974,28 +974,38 @@
       );
     }
 
-    // One gift card is drawn per site meeting, so each meeting gets its own
-    // wheel. Remote workers are drawn at the Salt Lake meeting.
-    const MEETING_LABELS = {
-      ROC: 'Rochester',
-      SLC: 'Salt Lake City + Remote',
-    };
+    // Which sites go on the wheel is chosen per draw. Remote workers might be
+    // drawn with Salt Lake one quarter and Rochester the next, so nothing here
+    // hard-codes that pairing.
     const SITE_LABELS = { ROC: 'Rochester', SLC: 'Salt Lake City', Remote: 'Remote', SD: 'San Diego' };
+    const SITE_ORDER = ['ROC', 'SLC', 'Remote', 'SD'];
+    const SITES_KEY = 'canyon_kudos_draw_sites';
+
+    const siteLabel = s => SITE_LABELS[s] || s;
+    const sitesLabel = list =>
+      list.length === 0 ? 'No sites selected' : list.map(siteLabel).join(' + ');
     // Only sites that map onto a wheel. Someone based anywhere else has to be
     // pointed at whichever meeting they will actually attend.
     const ASSIGNABLE = ['ROC', 'SLC', 'Remote', 'EXCLUDE'];
 
     function DrawingTab({ sites }) {
       const [quarter, setQuarter] = useState(currentQuarter());
-      const [meeting, setMeeting] = useState('ROC');
+      const [selectedSites, setSelectedSites] = useState(() => {
+        try {
+          const saved = JSON.parse(localStorage.getItem(SITES_KEY) || 'null');
+          if (Array.isArray(saved) && saved.length) return saved;
+        } catch (_) {}
+        return ['ROC'];
+      });
       const [pool, setPool] = useState([]);
-      const [meetings, setMeetings] = useState({ ROC: ['ROC'], SLC: ['SLC', 'Remote'] });
       const [recCount, setRecCount] = useState(0);
       const [loading, setLoading] = useState(false);
       const [loadError, setLoadError] = useState('');
       const [spinning, setSpinning] = useState(false);
       const [winner, setWinner] = useState(null);
       const [showWinner, setShowWinner] = useState(false);
+      const [finalizing, setFinalizing] = useState(false);
+      const [finalized, setFinalized] = useState(false);
       const [pastDrawings, setPastDrawings] = useState([]);
       const [fullscreen, setFullscreen] = useState(false);
       const [rotation, setRotation] = useState(0);
@@ -1012,7 +1022,6 @@
         try {
           const res = await adminCall('loadDrawingPool', { start, end });
           setPool(res.pool || []);
-          if (res.meetings) setMeetings(res.meetings);
           setRecCount(res.recognitionCount || 0);
         } catch (e) {
           if (!e.unauthorized) { console.error(e); setLoadError(e.message || 'Could not load the drawing pool.'); }
@@ -1030,15 +1039,30 @@
         }
       };
 
-      // The wheel for the meeting being run. One entry per person — someone
-      // recognised three times still gets one slice, because equal-sized
-      // slices have to mean equal odds.
-      const meetingSites = meetings[meeting] || [];
-      const entries = pool.filter(p => p.site && meetingSites.includes(p.site));
+      // The wheel for the sites currently ticked. One entry per person —
+      // someone recognised three times still gets one slice, because
+      // equal-sized slices have to mean equal odds.
+      const entries = pool.filter(p => p.site && selectedSites.includes(p.site));
       const names = entries.map(p => p.name);
       // Anyone the roster match could not place. They are on no wheel until
       // an admin says where they belong, so nobody is silently dropped.
-      const unplaced = pool.filter(p => !p.site || !Object.values(meetings).flat().includes(p.site));
+      const unplaced = pool.filter(p => !p.site);
+      // Offer a checkbox for every site we know about plus any the pool turned
+      // up, so a site nobody anticipated still gets a way onto a wheel.
+      const availableSites = [...new Set([
+        ...SITE_ORDER,
+        ...pool.map(p => p.site).filter(Boolean),
+      ])];
+      const countAt = s => pool.filter(p => p.site === s).length;
+
+      const toggleSite = (s) => {
+        const next = selectedSites.includes(s)
+          ? selectedSites.filter(x => x !== s)
+          : [...selectedSites, s];
+        setSelectedSites(next);
+        try { localStorage.setItem(SITES_KEY, JSON.stringify(next)); } catch (_) {}
+        setWinner(null); setShowWinner(false); setFinalized(false); setRotation(0);
+      };
 
       const assignSite = async (person, site, displayName) => {
         try {
@@ -1072,6 +1096,7 @@
         setSpinning(true);
         setWinner(null);
         setShowWinner(false);
+        setFinalized(false);
 
         // Uniform over slices, matching what the wheel shows.
         const winnerIdx = Math.floor(Math.random() * entries.length);
@@ -1087,7 +1112,9 @@
 
         setRotation(finalRotation);
 
-        // After spin completes, show winner
+        // After spin completes, show winner. Nothing is written yet — the
+        // wheel gets spun for practice, and only a finalised result belongs
+        // in the history.
         setTimeout(async () => {
           setWinner(picked);
           setSpinning(false);
@@ -1095,22 +1122,32 @@
           // Dramatic pause then reveal
           await new Promise(r => setTimeout(r, 800));
           setShowWinner(true);
-
-          // Save to database via admin proxy
-          try {
-            await adminCall('insertDrawing', {
-              quarter,
-              winner_recognition_id: picked.recognitionIds[0],
-              notes: `${MEETING_LABELS[meeting]} — ${picked.name} drawn from ${entries.length} names`
-            });
-          } catch (e) {
-            if (!e.unauthorized) console.error('Failed to record drawing:', e);
-          }
-          loadPastDrawings();
         }, 5200);
       };
 
-      const siteName = MEETING_LABELS[meeting] || meeting;
+      // Stamps the result: who won, which sites were in play, and the time it
+      // was confirmed. This is the record of the draw having happened.
+      const finalizeDrawing = async () => {
+        if (!winner || finalized || finalizing) return;
+        setFinalizing(true);
+        try {
+          await adminCall('insertDrawing', {
+            quarter,
+            winner_recognition_id: winner.recognitionIds[0],
+            winner_name: winner.name,
+            sites: selectedSites,
+            pool_size: entries.length,
+            notes: `${sitesLabel(selectedSites)} — drawn from ${entries.length} names`,
+          });
+          setFinalized(true);
+          loadPastDrawings();
+        } catch (e) {
+          if (!e.unauthorized) alert('Could not record the drawing: ' + (e.message || e));
+        }
+        setFinalizing(false);
+      };
+
+      const siteName = sitesLabel(selectedSites);
 
       // Fullscreen roulette view
       if (fullscreen) {
@@ -1151,7 +1188,28 @@
                   <div className="winner-name">{winner.name}</div>
                   <div className="winner-value">{siteName}</div>
                   <br/>
-                  <button className="btn btn-primary" onClick={() => setShowWinner(false)} style={{ marginTop: 16 }}>Close</button>
+                  {finalized ? (
+                    <div style={{ marginTop: 16 }}>
+                      <div style={{ color: '#16a34a', fontWeight: 700, marginBottom: 12 }}>
+                        ✓ Recorded
+                      </div>
+                      <button className="btn btn-primary" onClick={() => setShowWinner(false)}>Close</button>
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: 16, display: 'flex', gap: 10, justifyContent: 'center' }}>
+                      <button className="btn btn-gold" onClick={finalizeDrawing} disabled={finalizing}>
+                        {finalizing ? 'Recording…' : '✓ Finalize this result'}
+                      </button>
+                      <button className="btn btn-primary" onClick={() => setShowWinner(false)}>
+                        Spin again
+                      </button>
+                    </div>
+                  )}
+                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 14 }}>
+                    {finalized
+                      ? 'Saved to the drawing history.'
+                      : 'Nothing is saved until you finalize. Spin as many times as you like.'}
+                  </div>
                 </div>
               </div>
             )}
@@ -1176,14 +1234,30 @@
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label">Meeting</label>
-                <select className="form-select" value={meeting} onChange={e => { setMeeting(e.target.value); setWinner(null); setShowWinner(false); setRotation(0); }}>
-                  {Object.keys(meetings).map(m => (
-                    <option key={m} value={m}>{MEETING_LABELS[m] || m}</option>
-                  ))}
-                </select>
-                <p style={{ fontSize: 12, color: 'var(--canyon-muted)', marginTop: 6 }}>
-                  One gift card per meeting. Remote workers are drawn with Salt Lake.
+                <label className="form-label">Who's on this wheel?</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {availableSites.map(s => {
+                    const on = selectedSites.includes(s);
+                    const n = countAt(s);
+                    return (
+                      <label key={s} style={{
+                        display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+                        padding: '8px 14px', borderRadius: 8, userSelect: 'none',
+                        border: on ? '2px solid var(--canyon-purple)' : '2px solid #e2e8f0',
+                        background: on ? '#faf5ff' : '#fff',
+                        fontWeight: on ? 600 : 400,
+                        opacity: n === 0 ? 0.5 : 1,
+                      }}>
+                        <input type="checkbox" checked={on} onChange={() => toggleSite(s)}
+                          style={{ width: 16, height: 16, accentColor: 'var(--canyon-purple)', cursor: 'pointer' }} />
+                        {siteLabel(s)}
+                        <span style={{ color: 'var(--canyon-muted)', fontWeight: 400, fontSize: 12 }}>{n}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <p style={{ fontSize: 12, color: 'var(--canyon-muted)', marginTop: 8 }}>
+                  Tick any combination — remote workers can go with whichever meeting suits that quarter.
                 </p>
               </div>
 
@@ -1248,17 +1322,27 @@
             )}
 
             <div className="card">
-              <h3 style={{ marginBottom: 16 }}>Past Drawings</h3>
+              <h3 style={{ marginBottom: 4 }}>Drawing History</h3>
+              <p style={{ fontSize: 12, color: 'var(--canyon-muted)', marginBottom: 16 }}>
+                Finalized results only — practice spins aren't recorded.
+              </p>
               {pastDrawings.length === 0 ? (
-                <p style={{ color: 'var(--canyon-muted)', fontSize: 14 }}>No drawings yet.</p>
+                <p style={{ color: 'var(--canyon-muted)', fontSize: 14 }}>No drawings recorded yet.</p>
               ) : (
                 pastDrawings.map(d => (
-                  <div key={d.id} style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div key={d.id} style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
                     <div>
-                      <strong>{d.recognitions?.recipient_name || 'Unknown'}</strong>
-                      <div style={{ fontSize: 12, color: 'var(--canyon-muted)' }}>{d.quarter} · {d.notes}</div>
+                      <strong>{d.winner_name || d.recognitions?.recipient_name || 'Unknown'}</strong>
+                      <div style={{ fontSize: 12, color: 'var(--canyon-muted)' }}>
+                        {d.quarter}
+                        {d.sites?.length ? ` · ${sitesLabel(d.sites)}` : ''}
+                        {d.pool_size ? ` · ${d.pool_size} names` : ''}
+                      </div>
                     </div>
-                    <span style={{ fontSize: 12, color: 'var(--canyon-muted)' }}>{new Date(d.drawn_at).toLocaleDateString()}</span>
+                    <span style={{ fontSize: 12, color: 'var(--canyon-muted)', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      {new Date(d.drawn_at).toLocaleDateString()}<br/>
+                      <span style={{ fontSize: 11 }}>{new Date(d.drawn_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+                    </span>
                   </div>
                 ))
               )}
