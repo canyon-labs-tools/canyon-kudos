@@ -1040,13 +1040,31 @@
       // an admin says where they belong, so nobody is silently dropped.
       const unplaced = pool.filter(p => !p.site || !Object.values(meetings).flat().includes(p.site));
 
-      const assignSite = async (person, site) => {
+      const assignSite = async (person, site, displayName) => {
         try {
-          await adminCall('setPersonSite', { aliasKeys: person.aliasKeys, site });
+          await adminCall('setPersonSite', {
+            aliasKeys: person.aliasKeys,
+            site: site ?? person.site,
+            displayName: displayName ?? null,
+          });
           await loadPool();
         } catch (e) {
           if (!e.unauthorized) alert('Could not save: ' + (e.message || e));
         }
+      };
+
+      // Names come off the HR roster, which carries the legal name — the wheel
+      // would say "Songlee Rich" for someone the whole room calls Bo. This is
+      // going on a screen in front of the site, so let an admin fix it.
+      const renamePerson = (person) => {
+        const next = window.prompt(
+          `Name to show on the wheel${person.raw !== person.name ? ` (nominated as "${person.raw}")` : ''}:`,
+          person.name,
+        );
+        if (next === null) return;
+        const trimmed = next.trim();
+        if (!trimmed || trimmed === person.name) return;
+        assignSite(person, person.site, trimmed);
       };
 
       const runDrawing = () => {
@@ -1177,16 +1195,23 @@
                 {loadError && (
                   <p style={{ fontSize: 13, color: '#9D2235', marginBottom: 12 }}>{loadError}</p>
                 )}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginBottom: 20, maxHeight: 160, overflow: 'auto' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginBottom: 8, maxHeight: 160, overflow: 'auto' }}>
                   {entries.map(p => (
-                    <span key={p.id} title={p.matchedTo ? `Nominated as "${p.raw}"` : undefined}
+                    <span key={p.id} onClick={() => renamePerson(p)}
+                      title={p.matchedTo ? `Nominated as "${p.raw}" — click to change the name shown on the wheel`
+                                         : 'Click to change the name shown on the wheel'}
                       style={{ padding: '4px 12px', background: p.confidence === 'fuzzy' ? '#fef3c7' : '#f1f5f9',
-                               borderRadius: 99, fontSize: 13, fontWeight: 500 }}>
+                               borderRadius: 99, fontSize: 13, fontWeight: 500, cursor: 'pointer',
+                               border: p.matchedTo ? '1px dashed #cbd5e1' : '1px solid transparent' }}>
                       {p.name}
                       {p.site === 'Remote' && <span style={{ color: 'var(--canyon-muted)', fontWeight: 400 }}> · remote</span>}
                     </span>
                   ))}
                 </div>
+                <p style={{ fontSize: 12, color: 'var(--canyon-muted)', marginBottom: 16 }}>
+                  Names come from the HR roster. Dashed outline = shown differently from how it was
+                  nominated; click any name to change what the wheel displays.
+                </p>
                 <button className="btn btn-gold btn-block" onClick={() => setFullscreen(true)} disabled={names.length === 0}
                   style={{ fontSize: 16, padding: '14px 24px' }}>
                   🎰 Launch {siteName} Wheel
