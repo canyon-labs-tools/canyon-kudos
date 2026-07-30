@@ -981,12 +981,17 @@
     const SITE_ORDER = ['ROC', 'SLC', 'Remote', 'SD'];
     const SITES_KEY = 'canyon_kudos_draw_sites';
 
-    const SITE_SHORT = { ROC: 'Roch', SLC: 'SLC', Remote: 'Remote', SD: 'SD' };
+    // Internally the Rochester site is "ROC", never "Roch".
+    const SITE_SHORT = { ROC: 'ROC', SLC: 'SLC', Remote: 'Remote', SD: 'SD' };
 
     const siteLabel = s => SITE_LABELS[s] || s;
     const siteShort = s => SITE_SHORT[s] || s;
+    // Always read in site order, never in the order the boxes happened to be
+    // ticked — "Rochester + Remote", not "Remote + Rochester".
+    const orderSites = list =>
+      [...list].sort((a, b) => SITE_ORDER.indexOf(a) - SITE_ORDER.indexOf(b));
     const sitesLabel = list =>
-      list.length === 0 ? 'No sites selected' : list.map(siteLabel).join(' + ');
+      list.length === 0 ? 'No sites selected' : orderSites(list).map(siteLabel).join(' + ');
 
     // At-a-glance record of which quarters have been drawn. The question this
     // answers is "has Q3 been done yet?", asked by someone who did not run it.
@@ -1060,7 +1065,7 @@
       const [selectedSites, setSelectedSites] = useState(() => {
         try {
           const saved = JSON.parse(localStorage.getItem(SITES_KEY) || 'null');
-          if (Array.isArray(saved) && saved.length) return saved;
+          if (Array.isArray(saved) && saved.length) return orderSites(saved);
         } catch (_) {}
         return ['ROC'];
       });
@@ -1123,9 +1128,9 @@
         .filter(s => countAt(s) > 0 || selectedSites.includes(s));
 
       const toggleSite = (s) => {
-        const next = selectedSites.includes(s)
+        const next = orderSites(selectedSites.includes(s)
           ? selectedSites.filter(x => x !== s)
-          : [...selectedSites, s];
+          : [...selectedSites, s]);
         setSelectedSites(next);
         try { localStorage.setItem(SITES_KEY, JSON.stringify(next)); } catch (_) {}
         setWinner(null); setShowWinner(false); setFinalized(false); setRotation(0);
@@ -1330,7 +1335,9 @@
               <div style={{ textAlign: 'center', padding: '24px 0' }}>
                 <p style={{ fontSize: 14, color: 'var(--canyon-muted)', marginBottom: 8 }}>
                   {loading ? 'Loading…'
-                    : `${names.length} name${names.length!==1?'s':''} on the ${siteName} wheel · ${recCount} recognition${recCount!==1?'s':''} this quarter`}
+                    : selectedSites.length === 0
+                      ? `Nobody selected · ${recCount} recognition${recCount!==1?'s':''} this quarter`
+                      : `${names.length} name${names.length!==1?'s':''} on the ${siteName} wheel · ${recCount} recognition${recCount!==1?'s':''} this quarter`}
                 </p>
                 {loadError && (
                   <p style={{ fontSize: 13, color: '#9D2235', marginBottom: 12 }}>{loadError}</p>
@@ -1354,7 +1361,9 @@
                 </p>
                 <button className="btn btn-gold btn-block" onClick={() => setFullscreen(true)} disabled={names.length === 0}
                   style={{ fontSize: 16, padding: '14px 24px' }}>
-                  🎰 Launch {siteName} Wheel
+                  {selectedSites.length === 0
+                    ? 'Tick a site above to build a wheel'
+                    : `🎰 Launch ${siteName} Wheel`}
                 </button>
               </div>
             </div>
