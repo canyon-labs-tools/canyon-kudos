@@ -9,6 +9,7 @@
 
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { buildPool, MEETINGS, norm } from "./drawing-pool.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -105,6 +106,63 @@ Deno.serve(async (req) => {
         }
         const { error } = await sb.from("recognition_drawings")
           .insert({ quarter, winner_recognition_id, notes });
+        if (error) throw error;
+        return json(200, { ok: true });
+      }
+
+      // Everyone eligible for a quarter, one entry per person, each tagged
+      // with the site whose meeting they should be drawn at. Group
+      // nominations are split; the HR roster supplies the site. The roster
+      // itself never leaves this function.
+      case "loadDrawingPool": {
+        const { start, end } = payload;
+        if (!start || !end) return json(400, { error: "Missing start or end" });
+
+        const [recRes, rosterRes, aliasRes] = await Promise.all([
+          sb.from("recognitions")
+            .select("id, recipient_name, core_value")
+            .eq("approved", true).gte("created_at", start).lt("created_at", end),
+          sb.rpc("kudos_roster"),
+          sb.from("kudos_person_alias").select("alias_key, display_name, site"),
+        ]);
+        if (recRes.error) throw recRes.error;
+        if (rosterRes.error) throw rosterRes.error;
+        if (aliasRes.error) throw aliasRes.error;
+
+        const pool = buildPool(
+          recRes.data ?? [],
+          rosterRes.data ?? [],
+          aliasRes.data ?? [],
+        ).filter((p) => p.site !== "EXCLUDE");
+
+        return json(200, {
+          pool,
+          meetings: MEETINGS,
+          recognitionCount: (recRes.data ?? []).length,
+        });
+      }
+
+      // Admin assigns (or corrects) someone's site. Written against every
+      // spelling of the name seen so far, so the fix sticks next quarter too.
+      case "setPersonSite": {
+        const { aliasKeys, site, displayName, note } = payload;
+        const keys: string[] = (aliasKeys ?? []).map((k: string) => norm(k)).filter(Boolean);
+        if (!keys.length) return json(400, { error: "Missing aliasKeys" });
+        const allowed = [...Object.keys(MEETINGS), "Remote", "SD", "EXCLUDE"];
+        if (site !== null && !allowed.includes(site)) {
+          return json(400, { error: "Invalid site: " + site });
+        }
+        const now = new Date().toISOString();
+        const { error } = await sb.from("kudos_person_alias").upsert(
+          keys.map((alias_key) => ({
+            alias_key,
+            site,
+            display_name: displayName ?? null,
+            note: note ?? null,
+            updated_at: now,
+          })),
+          { onConflict: "alias_key" },
+        );
         if (error) throw error;
         return json(200, { ok: true });
       }
