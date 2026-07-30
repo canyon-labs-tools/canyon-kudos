@@ -152,8 +152,8 @@
 
     /* Drawing - Fullscreen Roulette */
     .roulette-fullscreen { position: fixed; inset: 0; z-index: 200; background: linear-gradient(135deg, #1a2260 0%, #4a2252 35%, #3d1a3d 70%, #1a2260 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; animation: fadeIn 0.3s; }
-    .roulette-fullscreen .roulette-header { position: absolute; top: 24px; left: 32px; display: flex; align-items: center; gap: 12px; }
-    .roulette-fullscreen .roulette-header h2 { color: white; font-size: 22px; font-weight: 800; }
+    .roulette-fullscreen .roulette-header { position: absolute; top: 24px; left: 32px; display: flex; align-items: center; gap: 12px; max-width: calc(100% - 420px); }
+    .roulette-fullscreen .roulette-header h2 { color: white; font-size: 22px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .roulette-fullscreen .roulette-header span { color: rgba(255,255,255,0.4); font-size: 14px; }
     .roulette-close { position: absolute; top: 24px; right: 32px; background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.6); border: none; border-radius: 8px; padding: 8px 16px; cursor: pointer; font-size: 13px; font-family: inherit; }
     .roulette-close:hover { background: rgba(255,255,255,0.2); color: white; }
@@ -171,6 +171,41 @@
     .roulette-winner-card .winner-value { display: inline-block; padding: 8px 24px; border-radius: 99px; font-size: 16px; font-weight: 700; background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.8); margin-bottom: 32px; }
     .roulette-winner-card .winner-confetti { font-size: 48px; margin-bottom: 16px; }
     .roulette-info { position: absolute; bottom: 32px; color: rgba(255,255,255,0.3); font-size: 13px; text-align: center; }
+
+    /* Highlight grid — every nominee stays on screen for the whole draw, which
+       a wheel cannot do once the pool passes a couple of dozen names. */
+    .draw-grid-wrap { display: flex; flex-direction: column; align-items: center; gap: 28px; width: 100%; padding: 0 48px; }
+    /* overflow:auto, never hidden — if the layout is ever wrong the names
+       scroll rather than silently disappearing. */
+    .draw-grid { display: grid; gap: 6px; width: 100%; max-width: 1600px; max-height: 64vh; overflow: auto; }
+    /* Names wrap rather than ellipsing — a half-shown name is the readability
+       problem the grid exists to solve. */
+    .draw-cell { padding: 9px 8px; border-radius: 8px; text-align: center; color: rgba(255,255,255,0.62);
+                 background: rgba(255,255,255,0.055); border: 1px solid rgba(255,255,255,0.07);
+                 font-weight: 600; line-height: 1.25; overflow-wrap: break-word;
+                 display: flex; align-items: center; justify-content: center;
+                 transition: background 90ms linear, color 90ms linear, transform 90ms linear; }
+    .draw-cell.lit { background: linear-gradient(135deg, #D14124, #9D2235); color: #fff;
+                     border-color: rgba(255,255,255,0.5); transform: scale(1.06);
+                     box-shadow: 0 4px 22px rgba(209,65,36,0.55); }
+    .draw-cell.won { background: linear-gradient(135deg, #16a34a, #15803d); color: #fff;
+                     border-color: rgba(255,255,255,0.85); transform: scale(1.1);
+                     box-shadow: 0 0 0 3px rgba(255,255,255,0.32), 0 6px 34px rgba(22,163,74,0.7); }
+    .draw-readout { min-height: 74px; display: flex; align-items: center; justify-content: center;
+                    font-size: 46px; font-weight: 800; color: #fff; letter-spacing: -0.5px;
+                    text-shadow: 0 3px 26px rgba(0,0,0,0.55); text-align: center; }
+    .draw-readout.settled { color: #4ade80; }
+    .draw-start-btn { border: none; border-radius: 999px; padding: 15px 46px; cursor: pointer;
+                      background: linear-gradient(135deg, #D14124, #9D2235); color: #fff;
+                      font-family: inherit; font-size: 16px; font-weight: 800; letter-spacing: 1px;
+                      text-transform: uppercase; box-shadow: 0 4px 24px rgba(209,65,36,0.45); }
+    .draw-start-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .draw-mode-toggle { position: absolute; top: 24px; right: 152px; display: flex; gap: 4px;
+                        background: rgba(255,255,255,0.08); border-radius: 8px; padding: 3px; }
+    .draw-mode-toggle button { background: none; border: none; color: rgba(255,255,255,0.55);
+                               font-family: inherit; font-size: 12px; padding: 5px 12px;
+                               border-radius: 6px; cursor: pointer; }
+    .draw-mode-toggle button.on { background: rgba(255,255,255,0.9); color: #272E72; font-weight: 700; }
 
     /* Print styles */
     .print-card { border: 2px solid #e2e8f0; border-radius: 12px; padding: 32px; margin-bottom: 24px; page-break-inside: avoid; border-left: 6px solid var(--accent); }
@@ -980,6 +1015,10 @@
     const SITE_LABELS = { ROC: 'Rochester', SLC: 'Salt Lake City', Remote: 'Remote', SD: 'San Diego' };
     const SITE_ORDER = ['ROC', 'SLC', 'Remote', 'SD'];
     const SITES_KEY = 'canyon_kudos_draw_sites';
+    const DRAW_MODE_KEY = 'canyon_kudos_draw_mode';
+    // Past this many names a wheel's slices are too thin to read from the back
+    // of a room, so the grid is offered instead.
+    const WHEEL_READABLE_MAX = 24;
 
     // Internally the Rochester site is "ROC", never "Roch".
     const SITE_SHORT = { ROC: 'ROC', SLC: 'SLC', Remote: 'Remote', SD: 'SD' };
@@ -1060,6 +1099,74 @@
     // pointed at whichever meeting they will actually attend.
     const ASSIGNABLE = ['ROC', 'SLC', 'Remote', 'EXCLUDE'];
 
+    /**
+     * The draw display for larger pools. Everyone stays on screen for the whole
+     * draw — a wheel hides most of the room behind unreadable type once the
+     * pool passes a couple of dozen, which defeats the point of recognising
+     * people in front of their colleagues.
+     *
+     * The highlight walks the grid, fast at first and easing to a stop on the
+     * winner. The winner is decided before the animation starts; the animation
+     * only reveals it.
+     */
+    function HighlightGrid({ names, winnerIdx, running, settled, onStart, canStart, onSettled }) {
+      const [lit, setLit] = useState(-1);
+      const timer = useRef(null);
+
+      useEffect(() => {
+        if (!running || names.length === 0) return;
+        // Land on the winner after several full passes, decelerating.
+        const passes = 2 + Math.floor(names.length / 28);
+        const steps = names.length * passes + winnerIdx + 1;
+        let i = 0;
+        const tick = () => {
+          setLit(i % names.length);
+          i++;
+          if (i > steps) { setLit(winnerIdx); onSettled && onSettled(); return; }
+          const p = i / steps;
+          // 28ms flat out, easing to ~340ms on the final few.
+          const delay = 28 + Math.pow(p, 4.2) * 312;
+          timer.current = setTimeout(tick, delay);
+        };
+        tick();
+        return () => clearTimeout(timer.current);
+      }, [running, names.length, winnerIdx]);
+
+      useEffect(() => { if (!running && !settled) setLit(-1); }, [running, settled]);
+
+      // Every name has to be on screen at once, so the column count is driven
+      // by what fits vertically, not just by taste. Widen the grid until the
+      // rows fit the available height, then shrink the type to match.
+      const n = names.length;
+      const MAX_ROWS = 13;
+      const byTaste = n <= 12 ? 3 : n <= 30 ? 4 : n <= 56 ? 5 : n <= 90 ? 6 : 7;
+      const cols = Math.max(byTaste, Math.ceil(n / MAX_ROWS));
+      const fontSize = cols <= 4 ? 17 : cols <= 5 ? 15 : cols <= 6 ? 13.5
+        : cols <= 8 ? 12 : cols <= 10 ? 11 : 10;
+
+      const readout = settled ? names[winnerIdx]
+        : lit >= 0 ? names[lit]
+        : `${n} name${n !== 1 ? 's' : ''} in the draw`;
+
+      return (
+        <div className="draw-grid-wrap">
+          <div className="draw-grid" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, fontSize }}>
+            {names.map((nm, i) => (
+              <div key={i}
+                className={'draw-cell' + (settled && i === winnerIdx ? ' won' : (!settled && i === lit ? ' lit' : ''))}
+                title={nm}>
+                {nm}
+              </div>
+            ))}
+          </div>
+          <div className={'draw-readout' + (settled ? ' settled' : '')}>{readout}</div>
+          {!running && !settled && (
+            <button className="draw-start-btn" onClick={onStart} disabled={!canStart}>Draw</button>
+          )}
+        </div>
+      );
+    }
+
     function DrawingTab({ sites }) {
       const [quarter, setQuarter] = useState(currentQuarter());
       const [selectedSites, setSelectedSites] = useState(() => {
@@ -1081,6 +1188,15 @@
       const [pastDrawings, setPastDrawings] = useState([]);
       const [fullscreen, setFullscreen] = useState(false);
       const [rotation, setRotation] = useState(0);
+      const [winnerIdx, setWinnerIdx] = useState(-1);
+      const [drawMode, setDrawMode] = useState(() => {
+        try { return localStorage.getItem(DRAW_MODE_KEY) || 'grid'; } catch (_) { return 'grid'; }
+      });
+      const pickMode = (m) => {
+        setDrawMode(m);
+        try { localStorage.setItem(DRAW_MODE_KEY, m); } catch (_) {}
+        setWinner(null); setShowWinner(false); setFinalized(false); setRotation(0); setWinnerIdx(-1);
+      };
 
       useEffect(() => { loadPool(); loadPastDrawings(); }, [quarter]);
 
@@ -1163,6 +1279,15 @@
         assignSite(person, person.site, trimmed);
       };
 
+      // Nothing is written when a draw runs — the display gets used for
+      // practice, and only a finalised result belongs in the history.
+      const reveal = async (picked) => {
+        setWinner(picked);
+        setSpinning(false);
+        await new Promise(r => setTimeout(r, 800));   // dramatic pause
+        setShowWinner(true);
+      };
+
       const runDrawing = () => {
         if (entries.length === 0 || spinning) return;
         setSpinning(true);
@@ -1170,31 +1295,21 @@
         setShowWinner(false);
         setFinalized(false);
 
-        // Uniform over slices, matching what the wheel shows.
-        const winnerIdx = Math.floor(Math.random() * entries.length);
-        const picked = entries[winnerIdx];
+        // Uniform over people. The winner is decided here; the animation only
+        // reveals it, so neither display can bias the outcome.
+        const idx = Math.floor(Math.random() * entries.length);
+        setWinnerIdx(idx);
+        const picked = entries[idx];
 
-        // Calculate rotation: land the winner under the pointer (top center)
-        const segAngle = 360 / entries.length;
-        // Pointer is at top (270 degrees in canvas terms). We want the winner segment centered there.
-        const targetAngle = 360 - (winnerIdx * segAngle + segAngle / 2);
-        // Add multiple full rotations for drama (6-10 spins)
-        const extraSpins = (6 + Math.floor(Math.random() * 4)) * 360;
-        const finalRotation = rotation + extraSpins + targetAngle - (rotation % 360);
-
-        setRotation(finalRotation);
-
-        // After spin completes, show winner. Nothing is written yet — the
-        // wheel gets spun for practice, and only a finalised result belongs
-        // in the history.
-        setTimeout(async () => {
-          setWinner(picked);
-          setSpinning(false);
-
-          // Dramatic pause then reveal
-          await new Promise(r => setTimeout(r, 800));
-          setShowWinner(true);
-        }, 5200);
+        if (drawMode === 'wheel') {
+          const segAngle = 360 / entries.length;
+          // Pointer is at top. We want the winner segment centered there.
+          const targetAngle = 360 - (idx * segAngle + segAngle / 2);
+          const extraSpins = (6 + Math.floor(Math.random() * 4)) * 360;
+          setRotation(rotation + extraSpins + targetAngle - (rotation % 360));
+          setTimeout(() => reveal(picked), 5200);
+        }
+        // Grid mode reveals itself via HighlightGrid's onSettled.
       };
 
       // Stamps the result: who won, which sites were in play, and the time it
@@ -1229,8 +1344,18 @@
               <CanyonLogo height={36} variant="white" />
               <div>
                 <h2>{siteName} Drawing — {quarter}</h2>
-                <span>{names.length} name{names.length !== 1 ? 's' : ''} in the wheel</span>
+                <span>{names.length} name{names.length !== 1 ? 's' : ''} in the draw</span>
               </div>
+            </div>
+            <div className="draw-mode-toggle">
+              <button className={drawMode === 'grid' ? 'on' : ''} onClick={() => pickMode('grid')}
+                disabled={spinning}>Grid</button>
+              <button className={drawMode === 'wheel' ? 'on' : ''} onClick={() => pickMode('wheel')}
+                disabled={spinning}
+                title={names.length > WHEEL_READABLE_MAX
+                  ? `${names.length} names is more than a wheel can show legibly` : ''}>
+                Wheel{names.length > WHEEL_READABLE_MAX ? ' ⚠' : ''}
+              </button>
             </div>
             <button className="roulette-close" onClick={() => { setFullscreen(false); setShowWinner(false); }}>Exit Fullscreen</button>
 
@@ -1238,7 +1363,7 @@
               <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 22, textAlign: 'center' }}>
                 No {siteName} recognitions for {quarter}.<br/>No names to draw from.
               </div>
-            ) : (
+            ) : drawMode === 'wheel' ? (
               <RouletteWheel
                 names={names}
                 spinning={spinning}
@@ -1246,10 +1371,20 @@
                 onSpinClick={runDrawing}
                 canSpin={!spinning && names.length > 0}
               />
+            ) : (
+              <HighlightGrid
+                names={names}
+                winnerIdx={winnerIdx}
+                running={spinning}
+                settled={!!winner}
+                onStart={runDrawing}
+                canStart={!spinning && names.length > 0}
+                onSettled={() => reveal(entries[winnerIdx])}
+              />
             )}
 
             <div className="roulette-info">
-              {recCount} recognition{recCount !== 1 ? 's' : ''} this quarter · Each person gets one slot on the wheel
+              {recCount} recognition{recCount !== 1 ? 's' : ''} this quarter · Each person gets one entry
             </div>
 
             {showWinner && winner && (
@@ -1272,8 +1407,8 @@
                       <button className="btn btn-gold" onClick={finalizeDrawing} disabled={finalizing}>
                         {finalizing ? 'Recording…' : '✓ Finalize this result'}
                       </button>
-                      <button className="btn btn-primary" onClick={() => setShowWinner(false)}>
-                        Spin again
+                      <button className="btn btn-primary" onClick={() => { setShowWinner(false); setWinner(null); setWinnerIdx(-1); }}>
+                        Draw again
                       </button>
                     </div>
                   )}
@@ -1362,9 +1497,14 @@
                 <button className="btn btn-gold btn-block" onClick={() => setFullscreen(true)} disabled={names.length === 0}
                   style={{ fontSize: 16, padding: '14px 24px' }}>
                   {selectedSites.length === 0
-                    ? 'Tick a site above to build a wheel'
-                    : `🎰 Launch ${siteName} Wheel`}
+                    ? 'Tick a site above to build a draw'
+                    : `🎰 Launch ${siteName} Draw`}
                 </button>
+                {drawMode === 'wheel' && names.length > WHEEL_READABLE_MAX && (
+                  <p style={{ fontSize: 12, color: '#9D2235', marginTop: 10 }}>
+                    {names.length} names won't be readable on a wheel — switch to Grid on the draw screen.
+                  </p>
+                )}
               </div>
             </div>
 
