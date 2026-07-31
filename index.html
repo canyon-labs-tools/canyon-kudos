@@ -152,8 +152,8 @@
 
     /* Drawing - Fullscreen Roulette */
     .roulette-fullscreen { position: fixed; inset: 0; z-index: 200; background: linear-gradient(135deg, #1a2260 0%, #4a2252 35%, #3d1a3d 70%, #1a2260 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; animation: fadeIn 0.3s; }
-    .roulette-fullscreen .roulette-header { position: absolute; top: 24px; left: 32px; display: flex; align-items: center; gap: 12px; }
-    .roulette-fullscreen .roulette-header h2 { color: white; font-size: 22px; font-weight: 800; }
+    .roulette-fullscreen .roulette-header { position: absolute; top: 24px; left: 32px; display: flex; align-items: center; gap: 12px; max-width: calc(100% - 420px); }
+    .roulette-fullscreen .roulette-header h2 { color: white; font-size: 22px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .roulette-fullscreen .roulette-header span { color: rgba(255,255,255,0.4); font-size: 14px; }
     .roulette-close { position: absolute; top: 24px; right: 32px; background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.6); border: none; border-radius: 8px; padding: 8px 16px; cursor: pointer; font-size: 13px; font-family: inherit; }
     .roulette-close:hover { background: rgba(255,255,255,0.2); color: white; }
@@ -171,6 +171,61 @@
     .roulette-winner-card .winner-value { display: inline-block; padding: 8px 24px; border-radius: 99px; font-size: 16px; font-weight: 700; background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.8); margin-bottom: 32px; }
     .roulette-winner-card .winner-confetti { font-size: 48px; margin-bottom: 16px; }
     .roulette-info { position: absolute; bottom: 32px; color: rgba(255,255,255,0.3); font-size: 13px; text-align: center; }
+
+    /* Highlight grid — every nominee stays on screen for the whole draw, which
+       a wheel cannot do once the pool passes a couple of dozen names. */
+    .draw-grid-wrap { display: flex; flex-direction: column; align-items: center; gap: 28px; width: 100%; padding: 0 48px; }
+    /* overflow:auto, never hidden — if the layout is ever wrong the names
+       scroll rather than silently disappearing. */
+    .draw-grid { display: grid; gap: 6px; width: 100%; max-width: 1600px; max-height: 64vh; overflow: auto; }
+    /* Names wrap rather than ellipsing — a half-shown name is the readability
+       problem the grid exists to solve. */
+    .draw-cell { padding: 9px 8px; border-radius: 8px; text-align: center; color: rgba(255,255,255,0.62);
+                 background: rgba(255,255,255,0.055); border: 1px solid rgba(255,255,255,0.07);
+                 font-weight: 600; line-height: 1.25; overflow-wrap: break-word;
+                 display: flex; align-items: center; justify-content: center;
+                 transition: background 90ms linear, color 90ms linear, transform 90ms linear; }
+    .draw-cell.lit { background: linear-gradient(135deg, #D14124, #9D2235); color: #fff;
+                     border-color: rgba(255,255,255,0.5); transform: scale(1.06);
+                     box-shadow: 0 4px 22px rgba(209,65,36,0.55); }
+    .draw-cell.won { background: linear-gradient(135deg, #16a34a, #15803d); color: #fff;
+                     border-color: rgba(255,255,255,0.85); transform: scale(1.1);
+                     box-shadow: 0 0 0 3px rgba(255,255,255,0.32), 0 6px 34px rgba(22,163,74,0.7); }
+    .draw-readout { min-height: 74px; display: flex; align-items: center; justify-content: center;
+                    font-size: 46px; font-weight: 800; color: #fff; letter-spacing: -0.5px;
+                    text-shadow: 0 3px 26px rgba(0,0,0,0.55); text-align: center; }
+    .draw-readout.settled { color: #4ade80; }
+    .draw-start-btn { border: none; border-radius: 999px; padding: 15px 46px; cursor: pointer;
+                      background: linear-gradient(135deg, #D14124, #9D2235); color: #fff;
+                      font-family: inherit; font-size: 16px; font-weight: 800; letter-spacing: 1px;
+                      text-transform: uppercase; box-shadow: 0 4px 24px rgba(209,65,36,0.45); }
+    .draw-start-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .draw-mode-toggle { position: absolute; top: 24px; right: 152px; display: flex; gap: 4px;
+                        background: rgba(255,255,255,0.08); border-radius: 8px; padding: 3px; }
+    .draw-mode-toggle button { background: none; border: none; color: rgba(255,255,255,0.55);
+                               font-family: inherit; font-size: 12px; padding: 5px 12px;
+                               border-radius: 6px; cursor: pointer; }
+    .draw-mode-toggle button.on { background: rgba(255,255,255,0.9); color: #272E72; font-weight: 700; }
+
+    /* On-screen posting — the same content as the PDF/email, sized to be read
+       from across a room and to print cleanly straight from the browser. */
+    .onscreen-view { position: fixed; inset: 0; z-index: 200; background: #fff; display: flex; flex-direction: column; animation: fadeIn 0.25s; }
+    .onscreen-head { background: linear-gradient(120deg, #272E72, #5F295E); color: #fff; padding: 22px 40px;
+                     display: flex; align-items: center; justify-content: space-between; gap: 20px;
+                     border-bottom: 4px solid #D14124; }
+    .onscreen-head h1 { font-size: 26px; font-weight: 800; margin: 0; }
+    .onscreen-head p { font-size: 14px; color: rgba(255,255,255,0.72); margin: 4px 0 0 0; }
+    .onscreen-body { flex: 1; overflow: auto; padding: 28px 40px 48px;
+                     display: grid; grid-template-columns: repeat(auto-fill, minmax(390px, 1fr)); gap: 18px; align-content: start; }
+    .onscreen-card { border: 1px solid #e2e8f0; border-left: 4px solid #D14124; border-radius: 10px; padding: 16px 18px; break-inside: avoid; }
+    .onscreen-name { font-size: 19px; font-weight: 800; color: var(--canyon-navy); margin-bottom: 8px; }
+    .onscreen-meta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 12px; color: var(--canyon-muted); margin-bottom: 10px; }
+    .onscreen-desc { font-size: 14px; line-height: 1.55; color: #334155; }
+    @media print {
+      .onscreen-view { position: static; }
+      .onscreen-head { background: #272E72 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .onscreen-head .btn { display: none; }
+    }
 
     /* Print styles */
     .print-card { border: 2px solid #e2e8f0; border-radius: 12px; padding: 32px; margin-bottom: 24px; page-break-inside: avoid; border-left: 6px solid var(--accent); }
@@ -463,23 +518,41 @@
     // ═══════════════════════════════════════════════════════════
     // RECOGNITION FEED
     // ═══════════════════════════════════════════════════════════
+    const FEED_PAGE_SIZE = 50;
+
     function FeedPage({ sites }) {
       const [recs, setRecs] = useState([]);
       const [filter, setFilter] = useState({ value: '', site: '' });
       const [loading, setLoading] = useState(true);
+      const [loadingMore, setLoadingMore] = useState(false);
+      const [total, setTotal] = useState(null);
+      const [loadError, setLoadError] = useState('');
 
-      useEffect(() => {
-        loadRecs();
-      }, [filter]);
+      useEffect(() => { loadRecs(0); }, [filter]);
 
-      const loadRecs = async () => {
-        setLoading(true);
-        let q = supabase.from('recognitions').select('*, recognition_sites(name)').eq('approved', true).order('created_at', { ascending: false }).limit(50);
+      // Paged rather than capped. The cap silently hid every recognition past
+      // the 50th — a person checking whether their kudos was posted saw
+      // nothing and no explanation.
+      const loadRecs = async (offset) => {
+        offset === 0 ? setLoading(true) : setLoadingMore(true);
+        setLoadError('');
+        let q = supabase.from('recognitions')
+          .select('*, recognition_sites(name)', { count: 'exact' })
+          .eq('approved', true)
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false })          // stable tiebreak so paging can't skip a row
+          .range(offset, offset + FEED_PAGE_SIZE - 1);
         if (filter.value) q = q.eq('core_value', filter.value);
         if (filter.site) q = q.eq('site_id', filter.site);
-        const { data } = await q;
-        setRecs(data || []);
-        setLoading(false);
+        const { data, error, count } = await q;
+        if (error) {
+          // Never render a failed query as an empty feed.
+          setLoadError('Could not load recognitions — ' + (error.message || 'please retry.'));
+        } else {
+          setRecs(prev => offset === 0 ? (data || []) : [...prev, ...(data || [])]);
+          if (typeof count === 'number') setTotal(count);
+        }
+        setLoading(false); setLoadingMore(false);
       };
 
       return (
@@ -499,13 +572,41 @@
             <button className="btn btn-secondary btn-sm" onClick={() => window.print()} title="Print recognitions">🖨️ Print</button>
           </div>
 
-          {loading ? <p style={{color:'var(--canyon-muted)'}}>Loading...</p> : (
-            <div className="rec-list">
-              {recs.length === 0 && <p style={{color:'var(--canyon-muted)'}}>No recognitions yet. Be the first to recognize a colleague!</p>}
-              {recs.map(r => (
-                <RecCard key={r.id} rec={r} />
-              ))}
-            </div>
+          {loadError && (
+            <p style={{ color: '#9D2235', fontWeight: 600 }}>
+              ⚠ {loadError}{' '}
+              <button className="btn btn-sm" onClick={() => loadRecs(0)} style={{ marginLeft: 8 }}>Retry</button>
+            </p>
+          )}
+
+          {loading ? <p style={{color:'var(--canyon-muted)'}}>Loading...</p> : !loadError && (
+            <>
+              <div className="rec-list">
+                {recs.length === 0 && (
+                  <p style={{color:'var(--canyon-muted)'}}>
+                    {filter.value || filter.site
+                      ? 'No recognitions match this filter.'
+                      : 'No recognitions yet. Be the first to recognize a colleague!'}
+                  </p>
+                )}
+                {recs.map(r => (
+                  <RecCard key={r.id} rec={r} />
+                ))}
+              </div>
+
+              {total !== null && recs.length > 0 && (
+                <div className="no-print" style={{ textAlign: 'center', marginTop: 24 }}>
+                  <p style={{ fontSize: 13, color: 'var(--canyon-muted)', marginBottom: 10 }}>
+                    Showing {recs.length} of {total}
+                  </p>
+                  {recs.length < total && (
+                    <button className="btn btn-secondary" onClick={() => loadRecs(recs.length)} disabled={loadingMore}>
+                      {loadingMore ? 'Loading…' : `Show more (${total - recs.length} left)`}
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
           )}
 
           {/* Print-only view */}
@@ -550,9 +651,14 @@
       const loadSettings = async () => {
         const { data } = await supabase.from('recognition_settings').select('*').in('key', ['tv_display_days', 'tv_slide_seconds']);
         if (data) {
+          // A blank or junk setting used to become NaN here, which made the
+          // window date Invalid and threw inside loadRecs — the TV then looped
+          // the filler slides forever with nobody's recognition on it and no
+          // error anywhere. Keep the working default instead.
+          const posInt = (v) => { const n = parseInt(v, 10); return Number.isFinite(n) && n > 0 ? n : null; };
           data.forEach(row => {
-            if (row.key === 'tv_display_days') setDays(parseInt(row.value));
-            if (row.key === 'tv_slide_seconds') setSlideSec(parseInt(row.value));
+            if (row.key === 'tv_display_days') { const n = posInt(row.value); if (n) setDays(n); }
+            if (row.key === 'tv_slide_seconds') { const n = posInt(row.value); if (n) setSlideSec(n); }
           });
         }
       };
@@ -564,13 +670,18 @@
       }, [days]);
 
       const loadRecs = async () => {
-        const since = new Date(Date.now() - days * 86400000).toISOString();
-        const { data } = await supabase.from('recognitions')
+        // Belt and braces: the TV runs unattended on a wall, so a bad value
+        // must never be able to blank it.
+        const d = Number.isFinite(days) && days > 0 ? days : 14;
+        const since = new Date(Date.now() - d * 86400000).toISOString();
+        const { data, error } = await supabase.from('recognitions')
           .select('*, recognition_sites(name)')
           .eq('approved', true)
           .gte('created_at', since)
           .order('created_at', { ascending: false });
-        setRecs(data || []);
+        // Keep whatever is already on screen if a refresh fails, rather than
+        // wiping the wall because one poll timed out.
+        if (!error) setRecs(data || []);
       };
 
       // Animation & layout rotation
@@ -974,31 +1085,250 @@
       );
     }
 
+    // Which sites go on the wheel is chosen per draw. Remote workers might be
+    // drawn with Salt Lake one quarter and Rochester the next, so nothing here
+    // hard-codes that pairing.
+    const SITE_LABELS = { ROC: 'Rochester', SLC: 'Salt Lake City', Remote: 'Remote', SD: 'San Diego' };
+    const SITE_ORDER = ['ROC', 'SLC', 'Remote', 'SD'];
+    // Every reporting window is anchored to one timezone for the whole
+    // program. Built from the admin's own machine, the same recognition landed
+    // in Q3 for Salt Lake and Q4 for Rochester, and a week picked in Rochester
+    // covered a different band of hours than the same week picked in Salt Lake
+    // — which left an uncovered gap between consecutive weekly postings.
+    const PROGRAM_TZ = 'America/Denver';
+    const PROGRAM_TZ_LABEL = 'Mountain Time';
+
+    // How far the program timezone is from UTC at a given instant (DST-aware).
+    const tzOffsetMs = (date, tz) => {
+      const parts = Object.fromEntries(
+        new Intl.DateTimeFormat('en-US', {
+          timeZone: tz, hour12: false,
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', second: '2-digit',
+        }).formatToParts(date)
+          .filter(p => p.type !== 'literal')
+          .map(p => [p.type, p.value]));
+      const asUTC = Date.UTC(+parts.year, +parts.month - 1, +parts.day,
+        (+parts.hour) % 24, +parts.minute, +parts.second);
+      return asUTC - date.getTime();
+    };
+
+    // The UTC instant at which the given calendar day starts in PROGRAM_TZ.
+    // Two passes so a boundary that falls on a DST change still converges.
+    const zonedDayStartISO = (y, monthIdx, day, tz = PROGRAM_TZ) => {
+      const wall = Date.UTC(y, monthIdx, day, 0, 0, 0);
+      let ts = wall;
+      for (let i = 0; i < 2; i++) ts = wall - tzOffsetMs(new Date(ts), tz);
+      return new Date(ts).toISOString();
+    };
+
+    const SITES_KEY = 'canyon_kudos_draw_sites';
+    const DRAW_MODE_KEY = 'canyon_kudos_draw_mode';
+    // Past this many names a wheel's slices are too thin to read from the back
+    // of a room, so the grid is offered instead.
+    const WHEEL_READABLE_MAX = 24;
+
+    // Internally the Rochester site is "ROC", never "Roch".
+    const SITE_SHORT = { ROC: 'ROC', SLC: 'SLC', Remote: 'Remote', SD: 'SD' };
+
+    const siteLabel = s => SITE_LABELS[s] || s;
+    const siteShort = s => SITE_SHORT[s] || s;
+    // Always read in site order, never in the order the boxes happened to be
+    // ticked — "Rochester + Remote", not "Remote + Rochester".
+    const orderSites = list =>
+      [...list].sort((a, b) => SITE_ORDER.indexOf(a) - SITE_ORDER.indexOf(b));
+    const sitesLabel = list =>
+      list.length === 0 ? 'No sites selected' : orderSites(list).map(siteLabel).join(' + ');
+
+    // At-a-glance record of which quarters have been drawn. The question this
+    // answers is "has Q3 been done yet?", asked by someone who did not run it.
+    function DrawingCalendar({ drawings }) {
+      const now = new Date();
+      const thisYear = now.getFullYear();
+      const thisQ = Math.floor(now.getMonth() / 3) + 1;
+
+      const byQuarter = {};
+      for (const d of drawings) {
+        (byQuarter[d.quarter] ??= []).push(d);
+      }
+
+      const years = [...new Set([
+        thisYear,
+        ...Object.keys(byQuarter).map(q => parseInt(q.split('-Q')[0])).filter(Boolean),
+      ])].sort((a, b) => b - a);
+
+      return (
+        <div style={{ marginBottom: 24 }}>
+          {years.map(year => (
+            <div key={year} style={{ display: 'flex', alignItems: 'stretch', gap: 8, marginBottom: 8 }}>
+              <div style={{ width: 46, display: 'flex', alignItems: 'center', fontWeight: 700,
+                            fontSize: 14, color: 'var(--canyon-muted)' }}>{year}</div>
+              {[1, 2, 3, 4].map(q => {
+                const key = `${year}-Q${q}`;
+                const done = byQuarter[key] || [];
+                const isCurrent = year === thisYear && q === thisQ;
+                const future = year > thisYear || (year === thisYear && q > thisQ);
+                // Fixed order so the same pair of sites always reads the same
+                // way, whichever meeting happened to be spun first.
+                const sites = [...new Set(done.flatMap(d => d.sites || []))]
+                  .sort((a, b) => SITE_ORDER.indexOf(a) - SITE_ORDER.indexOf(b));
+                return (
+                  <div key={q} title={done.length
+                        ? done.map(d => `${d.winner_name} — ${sitesLabel(d.sites || [])} — ${new Date(d.drawn_at).toLocaleDateString()}`).join('\n')
+                        : future ? 'Not yet' : 'No drawing recorded'}
+                    style={{
+                      flex: 1, padding: '10px 6px', borderRadius: 8, textAlign: 'center',
+                      background: done.length ? '#f0fdf4' : future ? '#fafafa' : '#fff',
+                      border: isCurrent ? '2px solid var(--canyon-purple)'
+                            : done.length ? '1px solid #bbf7d0' : '1px dashed #e2e8f0',
+                      opacity: future && !done.length ? 0.5 : 1,
+                      cursor: done.length ? 'help' : 'default',
+                    }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: done.length ? '#166534' : 'var(--canyon-muted)' }}>
+                      Q{q}
+                    </div>
+                    <div style={{ fontSize: 16, lineHeight: '20px', color: '#16a34a' }}>
+                      {done.length ? '✓' : <span style={{ color: '#cbd5e1' }}>·</span>}
+                    </div>
+                    {sites.length > 0 && (
+                      <div style={{ fontSize: 10, color: '#166534', fontWeight: 600 }}>
+                        {sites.map(siteShort).join(' · ')}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      );
+    }
+    // Every real site is assignable, San Diego included — SD gets its own
+    // checkbox as soon as somebody there is nominated, so omitting it left an
+    // unmatched San Diego employee with no correct answer to pick.
+    const ASSIGNABLE = [...SITE_ORDER, 'EXCLUDE'];
+
+    /**
+     * The draw display for larger pools. Everyone stays on screen for the whole
+     * draw — a wheel hides most of the room behind unreadable type once the
+     * pool passes a couple of dozen, which defeats the point of recognising
+     * people in front of their colleagues.
+     *
+     * The highlight walks the grid, fast at first and easing to a stop on the
+     * winner. The winner is decided before the animation starts; the animation
+     * only reveals it.
+     */
+    function HighlightGrid({ names, winnerIdx, running, settled, onStart, canStart, onSettled }) {
+      const [lit, setLit] = useState(-1);
+      const timer = useRef(null);
+
+      useEffect(() => {
+        if (!running || names.length === 0) return;
+        // Land on the winner after several full passes, decelerating.
+        const passes = 2 + Math.floor(names.length / 28);
+        const steps = names.length * passes + winnerIdx + 1;
+        let i = 0;
+        const tick = () => {
+          setLit(i % names.length);
+          i++;
+          if (i > steps) { setLit(winnerIdx); onSettled && onSettled(); return; }
+          const p = i / steps;
+          // 28ms flat out, easing to ~340ms on the final few.
+          const delay = 28 + Math.pow(p, 4.2) * 312;
+          timer.current = setTimeout(tick, delay);
+        };
+        tick();
+        return () => clearTimeout(timer.current);
+      }, [running, names.length, winnerIdx]);
+
+      useEffect(() => { if (!running && !settled) setLit(-1); }, [running, settled]);
+
+      // Every name has to be on screen at once, so the column count is driven
+      // by what fits vertically, not just by taste. Widen the grid until the
+      // rows fit the available height, then shrink the type to match.
+      const n = names.length;
+      const MAX_ROWS = 13;
+      const byTaste = n <= 12 ? 3 : n <= 30 ? 4 : n <= 56 ? 5 : n <= 90 ? 6 : 7;
+      const cols = Math.max(byTaste, Math.ceil(n / MAX_ROWS));
+      const fontSize = cols <= 4 ? 17 : cols <= 5 ? 15 : cols <= 6 ? 13.5
+        : cols <= 8 ? 12 : cols <= 10 ? 11 : 10;
+
+      const readout = settled ? names[winnerIdx]
+        : lit >= 0 ? names[lit]
+        : `${n} name${n !== 1 ? 's' : ''} in the draw`;
+
+      return (
+        <div className="draw-grid-wrap">
+          <div className="draw-grid" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, fontSize }}>
+            {names.map((nm, i) => (
+              <div key={i}
+                className={'draw-cell' + (settled && i === winnerIdx ? ' won' : (!settled && i === lit ? ' lit' : ''))}
+                title={nm}>
+                {nm}
+              </div>
+            ))}
+          </div>
+          <div className={'draw-readout' + (settled ? ' settled' : '')}>{readout}</div>
+          {!running && !settled && (
+            <button className="draw-start-btn" onClick={onStart} disabled={!canStart}>Draw</button>
+          )}
+        </div>
+      );
+    }
+
     function DrawingTab({ sites }) {
       const [quarter, setQuarter] = useState(currentQuarter());
-      const [eligible, setEligible] = useState([]);
+      const [selectedSites, setSelectedSites] = useState(() => {
+        try {
+          const saved = JSON.parse(localStorage.getItem(SITES_KEY) || 'null');
+          if (Array.isArray(saved) && saved.length) return orderSites(saved);
+        } catch (_) {}
+        return ['ROC'];
+      });
+      const [pool, setPool] = useState([]);
+      const [excluded, setExcluded] = useState([]);
+      const [recCount, setRecCount] = useState(0);
+      const [loading, setLoading] = useState(false);
+      const [loadError, setLoadError] = useState('');
       const [spinning, setSpinning] = useState(false);
       const [winner, setWinner] = useState(null);
       const [showWinner, setShowWinner] = useState(false);
+      const [finalizing, setFinalizing] = useState(false);
+      const [finalized, setFinalized] = useState(false);
       const [pastDrawings, setPastDrawings] = useState([]);
-      const [siteFilter, setSiteFilter] = useState('');
       const [fullscreen, setFullscreen] = useState(false);
       const [rotation, setRotation] = useState(0);
+      const [winnerIdx, setWinnerIdx] = useState(-1);
+      const [drawMode, setDrawMode] = useState(() => {
+        try { return localStorage.getItem(DRAW_MODE_KEY) || 'grid'; } catch (_) { return 'grid'; }
+      });
+      const pickMode = (m) => {
+        setDrawMode(m);
+        try { localStorage.setItem(DRAW_MODE_KEY, m); } catch (_) {}
+        setWinner(null); setShowWinner(false); setFinalized(false); setRotation(0); setWinnerIdx(-1);
+      };
 
-      useEffect(() => { loadEligible(); loadPastDrawings(); }, [quarter, siteFilter]);
+      useEffect(() => { loadPool(); loadPastDrawings(); }, [quarter]);
 
-      const loadEligible = async () => {
+      const loadPool = async () => {
         const [y, q] = quarter.split('-Q');
         const qNum = parseInt(q);
-        const start = new Date(parseInt(y), (qNum-1)*3, 1).toISOString();
-        const end = new Date(parseInt(y), qNum*3, 1).toISOString();
-
-        let query = supabase.from('recognitions').select('id, recipient_name, core_value, site_id, recognition_sites(name)')
-          .eq('approved', true).gte('created_at', start).lt('created_at', end);
-        if (siteFilter) query = query.eq('site_id', siteFilter);
-
-        const { data } = await query;
-        setEligible(data || []);
+        // Quarter edges in the program timezone, not the admin's — Date.UTC
+        // rolls month 12 into January of the next year on its own.
+        const start = zonedDayStartISO(parseInt(y), (qNum-1)*3, 1);
+        const end = zonedDayStartISO(parseInt(y), qNum*3, 1);
+        setLoading(true);
+        setLoadError('');
+        try {
+          const res = await adminCall('loadDrawingPool', { start, end });
+          setPool(res.pool || []);
+          setExcluded(res.excluded || []);
+          setRecCount(res.recognitionCount || 0);
+        } catch (e) {
+          if (!e.unauthorized) { console.error(e); setLoadError(e.message || 'Could not load the drawing pool.'); }
+          setPool([]);
+        }
+        setLoading(false);
       };
 
       const loadPastDrawings = async () => {
@@ -1010,53 +1340,131 @@
         }
       };
 
-      const uniqueNames = [...new Set(eligible.map(e => e.recipient_name))];
+      // The wheel for the sites currently ticked. One entry per person —
+      // someone recognised three times still gets one slice, because
+      // equal-sized slices have to mean equal odds.
+      const entries = pool.filter(p => p.site && selectedSites.includes(p.site));
+      const names = entries.map(p => p.name);
+      // Anyone the roster match could not place. They are on no wheel until
+      // an admin says where they belong, so nobody is silently dropped.
+      const unplaced = pool.filter(p => !p.site);
+      const countAt = s => pool.filter(p => p.site === s).length;
+      // Only sites with someone to draw. A site with nobody nominated this
+      // quarter is not a choice to make, it is noise. A site that turns up in
+      // the pool gets a checkbox whether or not we anticipated it, and a
+      // ticked site stays visible so unticking it is always possible.
+      const availableSites = [...new Set([...SITE_ORDER, ...pool.map(p => p.site).filter(Boolean)])]
+        .filter(s => countAt(s) > 0 || selectedSites.includes(s));
+
+      const toggleSite = (s) => {
+        const next = orderSites(selectedSites.includes(s)
+          ? selectedSites.filter(x => x !== s)
+          : [...selectedSites, s]);
+        setSelectedSites(next);
+        try { localStorage.setItem(SITES_KEY, JSON.stringify(next)); } catch (_) {}
+        setWinner(null); setShowWinner(false); setFinalized(false); setRotation(0);
+      };
+
+      const assignSite = async (person, site, displayName) => {
+        try {
+          await adminCall('setPersonSite', {
+            aliasKeys: person.aliasKeys,
+            personId: person.id,
+            site: site ?? person.site,
+            displayName: displayName ?? null,
+          });
+          await loadPool();
+        } catch (e) {
+          if (!e.unauthorized) alert('Could not save: ' + (e.message || e));
+        }
+      };
+
+      // Names come off the HR roster, which carries the legal name — the wheel
+      // would say "Songlee Rich" for someone the whole room calls Bo. This is
+      // going on a screen in front of the site, so let an admin fix it.
+      // Hands someone back to the HR roster: drops the manual site and any
+      // renamed display, so an exclusion can be undone and a stale site heals.
+      const clearOverride = async (person) => {
+        try {
+          await adminCall('clearPersonSite', { aliasKeys: person.aliasKeys });
+          await loadPool();
+        } catch (e) {
+          if (!e.unauthorized) alert('Could not restore: ' + (e.message || e));
+        }
+      };
+
+      const renamePerson = (person) => {
+        const next = window.prompt(
+          `Name to show on the wheel${person.raw !== person.name ? ` (nominated as "${person.raw}")` : ''}:`,
+          person.name,
+        );
+        if (next === null) return;
+        const trimmed = next.trim();
+        if (!trimmed || trimmed === person.name) return;
+        assignSite(person, person.site, trimmed);
+      };
+
+      // Nothing is written when a draw runs — the display gets used for
+      // practice, and only a finalised result belongs in the history.
+      const reveal = async (picked) => {
+        setWinner(picked);
+        setSpinning(false);
+        await new Promise(r => setTimeout(r, 800));   // dramatic pause
+        setShowWinner(true);
+      };
 
       const runDrawing = () => {
-        if (uniqueNames.length === 0 || spinning) return;
+        if (entries.length === 0 || spinning) return;
         setSpinning(true);
         setWinner(null);
         setShowWinner(false);
+        setFinalized(false);
 
-        // Pick winner
-        const idx = Math.floor(Math.random() * eligible.length);
-        const picked = eligible[idx];
-        const winnerIdx = uniqueNames.indexOf(picked.recipient_name);
+        // Uniform over people. The winner is decided here; the animation only
+        // reveals it, so neither display can bias the outcome.
+        const idx = Math.floor(Math.random() * entries.length);
+        setWinnerIdx(idx);
+        const picked = entries[idx];
 
-        // Calculate rotation: land the winner under the pointer (top center)
-        const segAngle = 360 / uniqueNames.length;
-        // Pointer is at top (270 degrees in canvas terms). We want the winner segment centered there.
-        const targetAngle = 360 - (winnerIdx * segAngle + segAngle / 2);
-        // Add multiple full rotations for drama (6-10 spins)
-        const extraSpins = (6 + Math.floor(Math.random() * 4)) * 360;
-        const finalRotation = rotation + extraSpins + targetAngle - (rotation % 360);
-
-        setRotation(finalRotation);
-
-        // After spin completes, show winner
-        setTimeout(async () => {
-          setWinner(picked);
-          setSpinning(false);
-
-          // Dramatic pause then reveal
-          await new Promise(r => setTimeout(r, 800));
-          setShowWinner(true);
-
-          // Save to database via admin proxy
-          try {
-            await adminCall('insertDrawing', {
-              quarter,
-              winner_recognition_id: picked.id,
-              notes: `Drawn from ${eligible.length} eligible recognitions (${uniqueNames.length} unique names)`
-            });
-          } catch (e) {
-            if (!e.unauthorized) console.error('Failed to record drawing:', e);
-          }
-          loadPastDrawings();
-        }, 5200);
+        if (drawMode === 'wheel') {
+          const segAngle = 360 / entries.length;
+          // Canvas arc() starts at 3 o'clock and runs clockwise, so segment i's
+          // centre sits at (i + 0.5) * segAngle from there. The pointer is at
+          // 12 o'clock, i.e. 270°, so that is what the winner has to land on —
+          // the old 360-based value parked the winner at 3 o'clock and the room
+          // watched the wrong name stop under the arrow.
+          const targetAngle = 270 - (idx * segAngle + segAngle / 2);
+          const extraSpins = (6 + Math.floor(Math.random() * 4)) * 360;
+          const norm = ((targetAngle % 360) + 360) % 360;
+          setRotation(rotation + extraSpins + norm - (rotation % 360));
+          setTimeout(() => reveal(picked), 5200);
+        }
+        // Grid mode reveals itself via HighlightGrid's onSettled.
       };
 
-      const siteName = siteFilter ? sites.find(s => s.id === siteFilter)?.name : 'All Sites';
+      // Stamps the result: who won, which sites were in play, and the time it
+      // was confirmed. This is the record of the draw having happened.
+      const finalizeDrawing = async () => {
+        if (!winner || finalized || finalizing) return;
+        setFinalizing(true);
+        try {
+          await adminCall('insertDrawing', {
+            quarter,
+            winner_recognition_id: winner.recognitionIds[0],
+            winner_name: winner.name,
+            sites: selectedSites,
+            pool_size: entries.length,
+            notes: `${sitesLabel(selectedSites)} — drawn from ${entries.length} names`,
+          });
+          setFinalized(true);
+          loadPastDrawings();
+        } catch (e) {
+          if (!e.unauthorized) alert('Could not record the drawing: ' + (e.message || e));
+        }
+        setFinalizing(false);
+      };
+
+      const siteName = sitesLabel(selectedSites);
 
       // Fullscreen roulette view
       if (fullscreen) {
@@ -1065,28 +1473,48 @@
             <div className="roulette-header">
               <CanyonLogo height={36} variant="white" />
               <div>
-                <h2>Quarterly Drawing — {quarter}</h2>
-                <span>{siteName} · {uniqueNames.length} name{uniqueNames.length !== 1 ? 's' : ''} in the wheel</span>
+                <h2>{siteName} Drawing — {quarter}</h2>
+                <span>{names.length} name{names.length !== 1 ? 's' : ''} in the draw</span>
               </div>
+            </div>
+            <div className="draw-mode-toggle">
+              <button className={drawMode === 'grid' ? 'on' : ''} onClick={() => pickMode('grid')}
+                disabled={spinning}>Grid</button>
+              <button className={drawMode === 'wheel' ? 'on' : ''} onClick={() => pickMode('wheel')}
+                disabled={spinning}
+                title={names.length > WHEEL_READABLE_MAX
+                  ? `${names.length} names is more than a wheel can show legibly` : ''}>
+                Wheel{names.length > WHEEL_READABLE_MAX ? ' ⚠' : ''}
+              </button>
             </div>
             <button className="roulette-close" onClick={() => { setFullscreen(false); setShowWinner(false); }}>Exit Fullscreen</button>
 
-            {uniqueNames.length === 0 ? (
+            {names.length === 0 ? (
               <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 22, textAlign: 'center' }}>
-                No recognitions for {quarter}.<br/>No names to draw from.
+                No {siteName} recognitions for {quarter}.<br/>No names to draw from.
               </div>
-            ) : (
+            ) : drawMode === 'wheel' ? (
               <RouletteWheel
-                names={uniqueNames}
+                names={names}
                 spinning={spinning}
                 rotation={rotation}
                 onSpinClick={runDrawing}
-                canSpin={!spinning && uniqueNames.length > 0}
+                canSpin={!spinning && names.length > 0}
+              />
+            ) : (
+              <HighlightGrid
+                names={names}
+                winnerIdx={winnerIdx}
+                running={spinning}
+                settled={!!winner}
+                onStart={runDrawing}
+                canStart={!spinning && names.length > 0}
+                onSettled={() => reveal(entries[winnerIdx])}
               />
             )}
 
             <div className="roulette-info">
-              {eligible.length} total recognition{eligible.length !== 1 ? 's' : ''} · Each recognized employee gets one slot on the wheel
+              {recCount} recognition{recCount !== 1 ? 's' : ''} this quarter · Each person gets one entry
             </div>
 
             {showWinner && winner && (
@@ -1094,10 +1522,31 @@
                 <div className="roulette-winner-card" onClick={e => e.stopPropagation()}>
                   <div className="winner-confetti">🎉🏆🎉</div>
                   <h1>Winner</h1>
-                  <div className="winner-name">{winner.recipient_name}</div>
-                  <div className="winner-value">{VALUE_ICONS[winner.core_value]} {winner.core_value}</div>
+                  <div className="winner-name">{winner.name}</div>
+                  <div className="winner-value">{siteName}</div>
                   <br/>
-                  <button className="btn btn-primary" onClick={() => setShowWinner(false)} style={{ marginTop: 16 }}>Close</button>
+                  {finalized ? (
+                    <div style={{ marginTop: 16 }}>
+                      <div style={{ color: '#16a34a', fontWeight: 700, marginBottom: 12 }}>
+                        ✓ Recorded
+                      </div>
+                      <button className="btn btn-primary" onClick={() => setShowWinner(false)}>Close</button>
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: 16, display: 'flex', gap: 10, justifyContent: 'center' }}>
+                      <button className="btn btn-gold" onClick={finalizeDrawing} disabled={finalizing}>
+                        {finalizing ? 'Recording…' : '✓ Finalize this result'}
+                      </button>
+                      <button className="btn btn-primary" onClick={() => { setShowWinner(false); setWinner(null); setWinnerIdx(-1); }}>
+                        Draw again
+                      </button>
+                    </div>
+                  )}
+                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 14 }}>
+                    {finalized
+                      ? 'Saved to the drawing history.'
+                      : 'Nothing is saved until you finalize. Spin as many times as you like.'}
+                  </div>
                 </div>
               </div>
             )}
@@ -1122,41 +1571,147 @@
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label">Site</label>
-                <select className="form-select" value={siteFilter} onChange={e => setSiteFilter(e.target.value)}>
-                  <option value="">All Sites</option>
-                  {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
+                <label className="form-label">Who's on this wheel?</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {availableSites.map(s => {
+                    const on = selectedSites.includes(s);
+                    const n = countAt(s);
+                    return (
+                      <label key={s} style={{
+                        display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+                        padding: '8px 14px', borderRadius: 8, userSelect: 'none',
+                        border: on ? '2px solid var(--canyon-purple)' : '2px solid #e2e8f0',
+                        background: on ? '#faf5ff' : '#fff',
+                        fontWeight: on ? 600 : 400,
+                      }}>
+                        <input type="checkbox" checked={on} onChange={() => toggleSite(s)}
+                          style={{ width: 16, height: 16, accentColor: 'var(--canyon-purple)', cursor: 'pointer' }} />
+                        {siteLabel(s)}
+                        <span style={{ color: 'var(--canyon-muted)', fontWeight: 400, fontSize: 12 }}>{n}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <p style={{ fontSize: 12, color: 'var(--canyon-muted)', marginTop: 8 }}>
+                  Tick any combination — remote workers can go with whichever meeting suits that quarter.
+                </p>
               </div>
 
               <div style={{ textAlign: 'center', padding: '24px 0' }}>
                 <p style={{ fontSize: 14, color: 'var(--canyon-muted)', marginBottom: 8 }}>
-                  {eligible.length} recognition{eligible.length!==1?'s':''} from {uniqueNames.length} unique name{uniqueNames.length!==1?'s':''}
+                  {loading ? 'Loading…'
+                    : selectedSites.length === 0
+                      ? `Nobody selected · ${recCount} recognition${recCount!==1?'s':''} this quarter`
+                      : `${names.length} name${names.length!==1?'s':''} on the ${siteName} wheel · ${recCount} recognition${recCount!==1?'s':''} this quarter`}
                 </p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginBottom: 20, maxHeight: 120, overflow: 'auto' }}>
-                  {uniqueNames.map(n => (
-                    <span key={n} style={{ padding: '4px 12px', background: '#f1f5f9', borderRadius: 99, fontSize: 13, fontWeight: 500 }}>{n}</span>
+                {loadError && (
+                  <p style={{ fontSize: 13, color: '#9D2235', marginBottom: 12 }}>{loadError}</p>
+                )}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginBottom: 8, maxHeight: 160, overflow: 'auto' }}>
+                  {entries.map(p => (
+                    <span key={p.id} onClick={() => renamePerson(p)}
+                      title={p.matchedTo ? `Nominated as "${p.raw}" — click to change the name shown on the wheel`
+                                         : 'Click to change the name shown on the wheel'}
+                      style={{ padding: '4px 12px', background: p.confidence === 'fuzzy' ? '#fef3c7' : '#f1f5f9',
+                               borderRadius: 99, fontSize: 13, fontWeight: 500, cursor: 'pointer',
+                               border: p.matchedTo ? '1px dashed #cbd5e1' : '1px solid transparent' }}>
+                      {p.name}
+                      {p.site === 'Remote' && <span style={{ color: 'var(--canyon-muted)', fontWeight: 400 }}> · remote</span>}
+                    </span>
                   ))}
                 </div>
-                <button className="btn btn-gold btn-block" onClick={() => setFullscreen(true)} disabled={uniqueNames.length === 0}
+                <p style={{ fontSize: 12, color: 'var(--canyon-muted)', marginBottom: 16 }}>
+                  Names come from the HR roster. Dashed outline = shown differently from how it was
+                  nominated; click any name to change what the wheel displays.
+                </p>
+                <button className="btn btn-gold btn-block" onClick={() => setFullscreen(true)} disabled={names.length === 0}
                   style={{ fontSize: 16, padding: '14px 24px' }}>
-                  🎰 Launch Roulette Wheel
+                  {selectedSites.length === 0
+                    ? 'Tick a site above to build a draw'
+                    : `🎰 Launch ${siteName} Draw`}
                 </button>
+                {drawMode === 'wheel' && names.length > WHEEL_READABLE_MAX && (
+                  <p style={{ fontSize: 12, color: '#9D2235', marginTop: 10 }}>
+                    {names.length} names won't be readable on a wheel — switch to Grid on the draw screen.
+                  </p>
+                )}
               </div>
             </div>
 
+            {excluded.length > 0 && (
+              <div className="card" style={{ borderLeft: '4px solid #94a3b8' }}>
+                <h3 style={{ marginBottom: 6 }}>Skipped ({excluded.length})</h3>
+                <p style={{ fontSize: 13, color: 'var(--canyon-muted)', marginBottom: 16 }}>
+                  Marked as not an employee, so they're on no wheel. Restore anyone who
+                  should be back in — a contractor later hired on, for instance.
+                </p>
+                {excluded.map(p => (
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                           gap: 12, padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
+                    <div>
+                      <strong>{p.name}</strong>
+                      <span style={{ fontSize: 12, color: 'var(--canyon-muted)' }}> · nominated as "{p.raw}"</span>
+                    </div>
+                    <button className="btn btn-sm" onClick={() => clearOverride(p)}
+                      style={{ background: '#f1f5f9', color: 'var(--canyon-navy)' }}>Restore</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {unplaced.length > 0 && (
+              <div className="card" style={{ borderLeft: '4px solid #D14124' }}>
+                <h3 style={{ marginBottom: 6 }}>Needs a site ({unplaced.length})</h3>
+                <p style={{ fontSize: 13, color: 'var(--canyon-muted)', marginBottom: 16 }}>
+                  These names weren't found on the HR roster, so they're on neither wheel.
+                  Pick a site and they'll stay assigned for future quarters.
+                </p>
+                {unplaced.map(p => (
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                           gap: 12, padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
+                    <div>
+                      <strong>{p.name}</strong>
+                      {p.fromGroup && <span style={{ fontSize: 12, color: 'var(--canyon-muted)' }}> · from a group nomination</span>}
+                    </div>
+                    <select className="form-select" style={{ width: 180 }} defaultValue=""
+                      onChange={e => { if (e.target.value) assignSite(p, e.target.value); }}>
+                      <option value="">Assign…</option>
+                      {ASSIGNABLE.map(s => (
+                        <option key={s} value={s}>
+                          {s === 'EXCLUDE' ? 'Not an employee — skip' : SITE_LABELS[s] || s}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="card">
-              <h3 style={{ marginBottom: 16 }}>Past Drawings</h3>
+              <h3 style={{ marginBottom: 4 }}>Drawing History</h3>
+              <p style={{ fontSize: 12, color: 'var(--canyon-muted)', marginBottom: 16 }}>
+                Finalized results only — practice spins aren't recorded.
+              </p>
+
+              <DrawingCalendar drawings={pastDrawings} />
+
               {pastDrawings.length === 0 ? (
-                <p style={{ color: 'var(--canyon-muted)', fontSize: 14 }}>No drawings yet.</p>
+                <p style={{ color: 'var(--canyon-muted)', fontSize: 14 }}>No drawings recorded yet.</p>
               ) : (
                 pastDrawings.map(d => (
-                  <div key={d.id} style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div key={d.id} style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
                     <div>
-                      <strong>{d.recognitions?.recipient_name || 'Unknown'}</strong>
-                      <div style={{ fontSize: 12, color: 'var(--canyon-muted)' }}>{d.quarter} · {d.notes}</div>
+                      <strong>{d.winner_name || d.recognitions?.recipient_name || 'Unknown'}</strong>
+                      <div style={{ fontSize: 12, color: 'var(--canyon-muted)' }}>
+                        {d.quarter}
+                        {d.sites?.length ? ` · ${sitesLabel(d.sites)}` : ''}
+                        {d.pool_size ? ` · ${d.pool_size} names` : ''}
+                      </div>
                     </div>
-                    <span style={{ fontSize: 12, color: 'var(--canyon-muted)' }}>{new Date(d.drawn_at).toLocaleDateString()}</span>
+                    <span style={{ fontSize: 12, color: 'var(--canyon-muted)', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      {new Date(d.drawn_at).toLocaleDateString()}<br/>
+                      <span style={{ fontSize: 11 }}>{new Date(d.drawn_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+                    </span>
                   </div>
                 ))
               )}
@@ -1187,16 +1742,24 @@
         }
       };
 
+      // These drive an unattended wall display, so refuse to store a value
+      // that would blank it rather than reporting a successful save.
+      const posInt = (v) => { const n = parseInt(v, 10); return Number.isFinite(n) && n > 0 ? n : null; };
+
       const saveTvDays = async () => {
+        const n = posInt(tvDays);
+        if (!n) { alert('Enter a number of days greater than zero.'); return; }
         setSaving(true);
-        try { await adminCall('updateSetting', { key: 'tv_display_days', value: tvDays }); }
+        try { await adminCall('updateSetting', { key: 'tv_display_days', value: String(n) }); }
         catch (e) { if (!e.unauthorized) alert(e.message); }
         setSaving(false);
       };
 
       const saveTvSlide = async () => {
+        const n = posInt(tvSlide);
+        if (!n) { alert('Enter a number of seconds greater than zero.'); return; }
         setSavingSlide(true);
-        try { await adminCall('upsertSetting', { key: 'tv_slide_seconds', value: tvSlide }); }
+        try { await adminCall('upsertSetting', { key: 'tv_slide_seconds', value: String(n) }); }
         catch (e) { if (!e.unauthorized) alert(e.message); }
         setSavingSlide(false);
       };
@@ -1363,12 +1926,23 @@
 
       const loadRecs = async () => {
         setLoading(true);
-        const since = new Date(Date.now() - weeks * 7 * 86400000).toISOString();
+        // Anchored to the start of a day, not to the instant of the click. The
+        // rolling cutoff meant the same export included or excluded a real
+        // person depending on what time of day it was run, and disagreed with
+        // the PDF/email window which is calendar-day based.
+        const start = new Date(); start.setHours(0, 0, 0, 0);
+        start.setDate(start.getDate() - weeks * 7 + 1);
         const q = supabase.from('recognitions').select('*, recognition_sites(name)')
-          .eq('approved', true).gte('created_at', since).order('created_at', { ascending: false });
-        const { data } = await q;
-        setRecs(data || []);
-        setStatus('');
+          .eq('approved', true).gte('created_at', start.toISOString())
+          .order('created_at', { ascending: false });
+        const { data, error } = await q;
+        if (error) {
+          setRecs([]);
+          setStatus('⚠ Could not load recognitions — ' + (error.message || 'please retry.'));
+        } else {
+          setRecs(data || []);
+          setStatus('');
+        }
         setLoading(false);
       };
 
@@ -1411,15 +1985,17 @@
         return lo;
       };
 
-      // Drop whole names (never half a name) if even the wide card can't hold them.
-      const fitNames = (name, boxW, maxLines, pt) => {
-        if (estW(name, pt, true) <= boxW * maxLines * 0.94) return name;
-        const parts = (name || '').split(/\s*,\s*/).filter(Boolean);
-        for (let keep = parts.length - 1; keep >= 1; keep--) {
-          const s = parts.slice(0, keep).join(', ') + ` +${parts.length - keep} more`;
-          if (estW(s, pt, true) <= boxW * maxLines * 0.94) return s;
+      // Never drop a name. A person who was recognised by a colleague and then
+      // silently replaced by "+3 more" on the projector is the worst outcome
+      // this deck can produce, so an over-long group shrinks instead — right
+      // down to NAME_MIN_PT, and past that it simply runs small rather than
+      // losing anybody.
+      const NAME_MIN_PT = 7;
+      const fitNamePt = (name, boxW, maxLines, startPt) => {
+        for (let pt = startPt; pt > NAME_MIN_PT; pt -= 0.5) {
+          if (estW(name, pt, true) <= boxW * maxLines * 0.94) return pt;
         }
-        return name;
+        return NAME_MIN_PT;
       };
 
       // Flow the cards into pages: half-width cards pair up, and a recognition
@@ -1502,9 +2078,10 @@
 
               const nameX = cx + 0.62, innerX = cx + 0.3, innerW = cw - 0.6;
               const nw = nameBoxW(cw), nameH = c.wide ? 0.62 : 0.4;
-              const namePt = fitPt(c.nm, nw, 2, 15, c.wide ? 10 : 11);
+              // Shrink until every name fits rather than trimming the list.
+              const namePt = fitNamePt(c.nm, nw, 2, fitPt(c.nm, nw, 2, 15, c.wide ? 10 : 11));
               // recipient (leave room for the value pill on the right)
-              slide.addText(fitNames(c.nm, nw, 2, namePt), { x: nameX, y: cy + 0.18, w: nw, h: nameH, fontFace: 'Arial', fontSize: namePt, bold: true, color: NAVY, valign: 'middle', margin: 0 });
+              slide.addText(tidyName(c.nm), { x: nameX, y: cy + 0.18, w: nw, h: nameH, fontFace: 'Arial', fontSize: namePt, bold: true, color: NAVY, valign: 'middle', margin: 0 });
               // value pill
               slide.addShape(pptx.ShapeType.roundRect, { x: cx + cw - PILL_W - 0.24, y: cy + 0.22, w: PILL_W, h: PILL_H, rectRadius: 0.16, fill: { color: vhex } });
               slide.addText((r.core_value || '').toUpperCase(), { x: cx + cw - PILL_W - 0.24, y: cy + 0.22, w: PILL_W, h: PILL_H, align: 'center', valign: 'middle', fontFace: 'Arial', fontSize: 8.5, bold: true, color: 'FFFFFF', margin: 0 });
@@ -1548,6 +2125,10 @@
                   <option value={2}>Last 2 weeks</option>
                   <option value={4}>Last 4 weeks</option>
                   <option value={8}>Last 8 weeks</option>
+                  {/* A quarter is 13 weeks; without these a quarterly recap
+                      deck could not reach its own first month. */}
+                  <option value={13}>Last quarter (13 weeks)</option>
+                  <option value={26}>Last 26 weeks</option>
                 </select>
               </div>
               <button className="btn btn-primary" onClick={generatePptx} disabled={loading || generating || recs.length === 0}>
@@ -1582,6 +2163,58 @@
 
     const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
     const ordinal = n => { const s = ['th','st','nd','rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
+
+    // Coverage strip for the weekly posting. The Mon–Sun arithmetic is sound,
+    // but two operational mistakes are invisible without a record: posting
+    // "This week" mid-week and then "Last week" on Monday sends the same days
+    // twice, and missing a Monday loses seven days with nobody the wiser.
+    function PostingCoverage({ postings, from, to, weeks = 10 }) {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const thisMon = mondayOf(today);
+      const covered = (s, e) => postings.some(p =>
+        p.range_start <= fmtYMD(s) && p.range_end >= fmtYMD(e));
+      const partly = (s, e) => postings.some(p =>
+        p.range_start <= fmtYMD(e) && p.range_end >= fmtYMD(s));
+
+      const cells = [];
+      for (let i = weeks - 1; i >= 0; i--) {
+        const s = addDays(thisMon, -7 * i);
+        const e = addDays(s, 6);
+        const isThis = i === 0;
+        const full = covered(s, e), some = !full && partly(s, e);
+        // Only completed weeks count as a gap; the current one isn't due yet.
+        const gap = !full && !some && !isThis;
+        const selected = from <= fmtYMD(e) && to >= fmtYMD(s);
+        cells.push({ s, e, full, some, gap, isThis, selected });
+      }
+      const gaps = cells.filter(c => c.gap).length;
+
+      return (
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {cells.map((c, i) => (
+              <div key={i}
+                title={`${fmtYMD(c.s)} – ${fmtYMD(c.e)}\n${c.full ? 'Posted' : c.some ? 'Partly posted' : c.isThis ? 'Current week' : 'Not posted'}`}
+                style={{
+                  flex: 1, height: 34, borderRadius: 6, display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', fontSize: 10, fontWeight: 700, cursor: 'help',
+                  background: c.full ? '#dcfce7' : c.some ? '#fef3c7' : c.gap ? '#fee2e2' : '#f1f5f9',
+                  color: c.full ? '#166534' : c.some ? '#92400e' : c.gap ? '#9D2235' : 'var(--canyon-muted)',
+                  outline: c.selected ? '2px solid var(--canyon-purple)' : 'none',
+                  outlineOffset: -2,
+                }}>
+                {c.full ? '✓' : c.some ? '◐' : c.gap ? '!' : '·'}
+              </div>
+            ))}
+          </div>
+          <p style={{ fontSize: 12, color: gaps ? '#9D2235' : 'var(--canyon-muted)', marginTop: 6, marginBottom: 0 }}>
+            {gaps
+              ? `⚠ ${gaps} week${gaps !== 1 ? 's' : ''} in the last ${weeks} never posted — hover to see which.`
+              : `Last ${weeks} weeks · ✓ posted · ◐ partly · · current week`}
+          </p>
+        </div>
+      );
+    }
 
     const presetRange = p => {
       const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -1670,6 +2303,8 @@
       const [loading, setLoading] = useState(true);
       const [busy, setBusy] = useState('');
       const [status, setStatus] = useState('');
+      const [postings, setPostings] = useState([]);
+      const [onScreen, setOnScreen] = useState(false);
 
       useEffect(() => {
         if (preset === 'custom') return;
@@ -1678,20 +2313,71 @@
       }, [preset]);
 
       useEffect(() => { load(); }, [from, to]);
+      useEffect(() => { loadPostings(); }, []);
 
-      const invalid = parseYMD(from) > parseYMD(to);
+      const loadPostings = async () => {
+        try {
+          const { postings } = await adminCall('loadPostings');
+          setPostings(postings || []);
+        } catch (e) { if (!e.unauthorized) console.error(e); }
+      };
+
+      // Any previously posted range touching this one means days would go out
+      // a second time.
+      const overlapping = postings.filter(p => p.range_start <= to && p.range_end >= from);
+      const alreadyPosted = overlapping.some(p => p.range_start <= from && p.range_end >= to);
+
+      const markPosted = async () => {
+        setBusy('mark');
+        try {
+          await adminCall('insertPosting', {
+            range_start: from, range_end: to,
+            recognition_count: recs.length,
+            note: subtitle,
+          });
+          await loadPostings();
+          setStatus(`✓ Marked ${from} – ${to} as posted.`);
+        } catch (e) {
+          if (!e.unauthorized) setStatus('⚠ ' + (e.message || 'Could not record the posting.'));
+        }
+        setBusy('');
+      };
+
+      // A cleared date input yields an Invalid Date, and NaN comparisons are
+      // false — so without the isNaN check the guard passes and load() throws
+      // on toISOString, freezing the tab on "Loading…".
+      const badDate = s => !s || isNaN(parseYMD(s).getTime());
+      const invalid = badDate(from) || badDate(to) || parseYMD(from) > parseYMD(to);
+
+      // Guards against a slow earlier request landing after a newer one and
+      // repopulating recs with the wrong range while the header, the filename
+      // and the "mark as posted" range all describe the new one.
+      const loadSeq = useRef(0);
 
       const load = async () => {
         if (invalid) { setRecs([]); setLoading(false); return; }
+        const seq = ++loadSeq.current;
         setLoading(true); setStatus('');
-        const start = parseYMD(from);
-        const end = addDays(parseYMD(to), 1); // exclusive upper bound
-        const { data } = await supabase.from('recognitions').select('*, recognition_sites(name)')
+        // Day edges in the program timezone so the same picked week means the
+        // same hours whoever runs it, and consecutive weeks abut exactly.
+        const f = parseYMD(from), t = addDays(parseYMD(to), 1); // exclusive upper bound
+        const start = zonedDayStartISO(f.getFullYear(), f.getMonth(), f.getDate());
+        const end = zonedDayStartISO(t.getFullYear(), t.getMonth(), t.getDate());
+        const { data, error } = await supabase.from('recognitions').select('*, recognition_sites(name)')
           .eq('approved', true)
-          .gte('created_at', start.toISOString())
-          .lt('created_at', end.toISOString())
+          .gte('created_at', start)
+          .lt('created_at', end)
           .order('created_at', { ascending: true });
-        setRecs(data || []);
+        if (seq !== loadSeq.current) return;   // a newer request already answered
+        if (error) {
+          // An empty result and a failed query look identical on screen, and
+          // one of them means a whole week silently goes unposted.
+          setRecs([]);
+          setStatus('⚠ Could not load this range — ' + (error.message || 'please retry.') +
+                    ' Do not post until this loads: the range may not be empty.');
+        } else {
+          setRecs(data || []);
+        }
         setLoading(false);
       };
 
@@ -1751,20 +2437,40 @@
             doc.setTextColor(255, 255, 255);
             doc.text(pill, M + CW - pw + 10, y + 0.5);
 
-            doc.setTextColor(...PDF_NAVY);
-            doc.setFont('helvetica', 'bold'); doc.setFontSize(14);
-            m.nameLines.forEach((ln, i) => doc.text(ln, M, y + i * 17));
-            let cy = y + (m.nameLines.length - 1) * 17 + 15;
+            // A long write-up can be taller than a whole page, and the caller's
+            // single page-break check cannot help once that happens — the rest
+            // was being drawn past the bottom edge, taking any names in the
+            // tail of the text with it. So each line checks for itself.
+            let cy = y;
+            const flow = (lineH, restyle) => {
+              if (cy + lineH > BOTTOM) { doc.addPage(); cy = contBar(); restyle(); }
+            };
 
-            doc.setTextColor(...PDF_MUTED);
-            doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+            const nameStyle = () => {
+              doc.setTextColor(...PDF_NAVY);
+              doc.setFont('helvetica', 'bold'); doc.setFontSize(14);
+            };
+            nameStyle();
+            m.nameLines.forEach((ln) => { flow(17, nameStyle); doc.text(ln, M, cy); cy += 17; });
+            cy = cy - 17 + 15;
+
+            const metaStyle = () => {
+              doc.setTextColor(...PDF_MUTED);
+              doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+            };
+            metaStyle(); flow(16, metaStyle);
             doc.text(pdfSafe(nominatorLine(r)), M, cy);
             cy += 16;
 
-            doc.setTextColor(...PDF_INK); doc.setFontSize(10.5);
-            m.descLines.forEach((ln, i) => doc.text(ln, M, cy + i * 14.5));
-            cy += (m.descLines.length - 1) * 14.5 + 18;
+            const bodyStyle = () => {
+              doc.setTextColor(...PDF_INK);
+              doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5);
+            };
+            bodyStyle();
+            m.descLines.forEach((ln) => { flow(14.5, bodyStyle); doc.text(ln, M, cy); cy += 14.5; });
+            cy += 3.5;   // keeps the original gap: (n-1)*14.5 + 18
 
+            if (cy > BOTTOM) { doc.addPage(); cy = contBar(); }
             doc.setDrawColor(226, 232, 240); doc.setLineWidth(0.7);
             doc.line(M, cy, M + CW, cy);
             return cy + 24;
@@ -1858,6 +2564,40 @@
         setBusy('');
       };
 
+      // A readable, projectable rendering of exactly the selected range,
+      // inside the app — the posting is often wanted on a screen in a meeting
+      // rather than as a file to attach.
+      if (onScreen) {
+        return (
+          <div className="onscreen-view">
+            <div className="onscreen-head">
+              <div>
+                <h1>Employee Achievement Bracelet Awards</h1>
+                <p>{subtitle} · {recs.length} recognition{recs.length !== 1 ? 's' : ''}</p>
+              </div>
+              <button className="btn" onClick={() => setOnScreen(false)}
+                style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none' }}>Close</button>
+            </div>
+            <div className="onscreen-body">
+              {recs.map(r => (
+                <div key={r.id} className="onscreen-card">
+                  <div className="onscreen-name">{tidyName(r.recipient_name)}</div>
+                  <div className="onscreen-meta">
+                    <span className={'value-pill ' + VALUE_CLASS(r.core_value)}
+                      style={{ padding: '3px 12px', fontSize: 12 }}>
+                      {VALUE_ICONS[r.core_value]} {r.core_value}
+                    </span>
+                    <span>{nominatorLine(r)}</span>
+                    <span>{new Date(r.created_at).toLocaleDateString()}</span>
+                  </div>
+                  <div className="onscreen-desc">{collapse(r.description)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      }
+
       return (
         <div>
           <div className="card" style={{ marginBottom: 24 }}>
@@ -1890,22 +2630,47 @@
               </div>
             </div>
 
+            <PostingCoverage postings={postings} from={from} to={to} />
+
             {invalid ? (
               <p style={{ fontSize: 14, color: '#9D2235', fontWeight: 600, margin: 0 }}>
                 ⚠ The “From” date is after the “To” date.
               </p>
             ) : (
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                <button className="btn btn-primary" onClick={downloadPdf}
-                  disabled={loading || !!busy || recs.length === 0}>
-                  {busy === 'pdf' ? 'Building…' : `📄 Download PDF (${recs.length})`}
-                </button>
-                <button className="btn btn-gold" onClick={copyEmail}
-                  disabled={loading || !!busy || recs.length === 0}>
-                  {busy === 'email' ? 'Copying…' : '📧 Copy email body'}
-                </button>
-                <span style={{ fontSize: 13, color: 'var(--canyon-muted)' }}>{subtitle}</span>
-              </div>
+              <>
+                {overlapping.length > 0 && (
+                  <p style={{ fontSize: 13, color: '#92400e', background: '#fef3c7', border: '1px solid #fde68a',
+                              borderRadius: 8, padding: '10px 12px', marginBottom: 14, fontWeight: 600 }}>
+                    {alreadyPosted
+                      ? `⚠ This exact range was already posted on ${new Date(overlapping[0].posted_at).toLocaleDateString()} — sending it again would repeat those recognitions.`
+                      : `⚠ Overlaps a posting already sent (${overlapping[0].range_start} – ${overlapping[0].range_end}). Those days would go out twice.`}
+                  </p>
+                )}
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <button className="btn btn-primary" onClick={downloadPdf}
+                    disabled={loading || !!busy || recs.length === 0}>
+                    {busy === 'pdf' ? 'Building…' : `📄 Download PDF (${recs.length})`}
+                  </button>
+                  <button className="btn btn-gold" onClick={copyEmail}
+                    disabled={loading || !!busy || recs.length === 0}>
+                    {busy === 'email' ? 'Copying…' : '📧 Copy email body'}
+                  </button>
+                  <button className="btn" onClick={() => setOnScreen(true)}
+                    disabled={loading || recs.length === 0}
+                    style={{ background: '#f1f5f9', color: 'var(--canyon-navy)', fontWeight: 600 }}>
+                    🖥️ Show on screen
+                  </button>
+                  <button className="btn" onClick={markPosted}
+                    disabled={loading || !!busy || recs.length === 0 || alreadyPosted}
+                    style={{ background: alreadyPosted ? '#dcfce7' : '#fff', color: alreadyPosted ? '#166534' : 'var(--canyon-navy)',
+                             border: '1px solid #cbd5e1', fontWeight: 600 }}>
+                    {alreadyPosted ? '✓ Recorded as posted' : busy === 'mark' ? 'Recording…' : 'Mark as posted'}
+                  </button>
+                  <span style={{ fontSize: 13, color: 'var(--canyon-muted)' }}>
+                    {subtitle} · days run {PROGRAM_TZ_LABEL}
+                  </span>
+                </div>
+              </>
             )}
 
             {status && <p style={{ fontSize: 14, marginTop: 16, marginBottom: 0, color: status[0] === '⚠' ? '#9D2235' : 'var(--canyon-navy)', fontWeight: 600 }}>{status}</p>}

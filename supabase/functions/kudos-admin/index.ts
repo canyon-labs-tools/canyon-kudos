@@ -9,6 +9,7 @@
 
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { buildPool, MEETINGS, norm } from "./drawing-pool.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -93,18 +94,146 @@ Deno.serve(async (req) => {
           .select(
             "*, recognitions:winner_recognition_id(recipient_name, core_value)",
           )
-          .order("drawn_at", { ascending: false }).limit(10);
+          .order("drawn_at", { ascending: false }).limit(50);
         if (error) throw error;
         return json(200, { drawings: data ?? [] });
       }
 
+      // Called only when an admin finalises a result. Spinning the wheel to
+      // try it out records nothing, so the history stays a list of the draws
+      // that actually counted.
       case "insertDrawing": {
-        const { quarter, winner_recognition_id, notes } = payload;
-        if (!quarter || !winner_recognition_id) {
-          return json(400, { error: "Missing quarter or winner_recognition_id" });
+        const { quarter, winner_recognition_id, winner_name, sites, pool_size, notes } =
+          payload;
+        if (!quarter || !winner_name) {
+          return json(400, { error: "Missing quarter or winner_name" });
         }
-        const { error } = await sb.from("recognition_drawings")
-          .insert({ quarter, winner_recognition_id, notes });
+        const { error } = await sb.from("recognition_drawings").insert({
+          quarter,
+          winner_recognition_id: winner_recognition_id ?? null,
+          winner_name,
+          sites: Array.isArray(sites) ? sites : null,
+          pool_size: pool_size ?? null,
+          notes: notes ?? null,
+        });
+        if (error) throw error;
+        return json(200, { ok: true });
+      }
+
+      // Everyone eligible for a quarter, one entry per person, each tagged
+      // with the site whose meeting they should be drawn at. Group
+      // nominations are split; the HR roster supplies the site. The roster
+      // itself never leaves this function.
+      case "loadDrawingPool": {
+        const { start, end } = payload;
+        if (!start || !end) return json(400, { error: "Missing start or end" });
+
+        const [recRes, rosterRes, aliasRes] = await Promise.all([
+          sb.from("recognitions")
+            .select("id, recipient_name, core_value")
+            .eq("approved", true).gte("created_at", start).lt("created_at", end),
+          sb.rpc("kudos_roster"),
+          sb.from("kudos_person_alias").select("alias_key, display_name, site, person_id"),
+        ]);
+        if (recRes.error) throw recRes.error;
+        if (rosterRes.error) throw rosterRes.error;
+        if (aliasRes.error) throw aliasRes.error;
+
+        const all = buildPool(
+          recRes.data ?? [],
+          rosterRes.data ?? [],
+          aliasRes.data ?? [],
+        );
+        // Excluded people are returned rather than dropped. Removing somebody
+        // from every wheel is a decision worth being able to see and undo —
+        // silently filtering it here meant a contractor later hired onto the
+        // roster stayed invisible with nothing to click.
+        const pool = all.filter((p) => p.site !== "EXCLUDE");
+        const excluded = all.filter((p) => p.site === "EXCLUDE");
+
+        return json(200, {
+          pool,
+          excluded,
+          meetings: MEETINGS,
+          recognitionCount: (recRes.data ?? []).length,
+        });
+      }
+
+      // Admin assigns (or corrects) someone's site. Written against every
+      // spelling of the name seen so far, so the fix sticks next quarter too.
+      case "setPersonSite": {
+        const { aliasKeys, site, displayName, note, personId } = payload;
+        const keys: string[] = (aliasKeys ?? []).map((k: string) => norm(k)).filter(Boolean);
+        if (!keys.length) return json(400, { error: "Missing aliasKeys" });
+        // SITE_ORDER on the client offers every real site, so accept them all
+        // — San Diego included, which the old list omitted even though SD gets
+        // its own checkbox as soon as somebody from there is nominated.
+        const allowed = ["ROC", "SLC", "Remote", "SD", "EXCLUDE"];
+        if (site !== null && !allowed.includes(site)) {
+          return json(400, { error: "Invalid site: " + site });
+        }
+
+        // Renaming and re-siting are separate acts. Writing display_name on
+        // every call would wipe a correction made earlier.
+        const { data: existing, error: readErr } = await sb
+          .from("kudos_person_alias").select("alias_key, display_name").in("alias_key", keys);
+        if (readErr) throw readErr;
+        const priorName = new Map((existing ?? []).map((r: any) => [r.alias_key, r.display_name]));
+
+        const now = new Date().toISOString();
+        const { error } = await sb.from("kudos_person_alias").upsert(
+          keys.map((alias_key) => ({
+            alias_key,
+            site,
+            display_name: displayName !== undefined && displayName !== null
+              ? displayName
+              : (priorName.get(alias_key) ?? null),
+            // Binds the override to the person it was made for, so it goes
+            // inert if that spelling later resolves to somebody else.
+            person_id: personId ?? null,
+            note: note ?? null,
+            updated_at: now,
+          })),
+          { onConflict: "alias_key" },
+        );
+        if (error) throw error;
+        return json(200, { ok: true });
+      }
+
+      // Drops every manual override for a person, handing them back to the HR
+      // roster. This is how an exclusion is undone.
+      case "clearPersonSite": {
+        const keys: string[] = (payload?.aliasKeys ?? [])
+          .map((k: string) => norm(k)).filter(Boolean);
+        if (!keys.length) return json(400, { error: "Missing aliasKeys" });
+        const { error } = await sb.from("kudos_person_alias").delete().in("alias_key", keys);
+        if (error) throw error;
+        return json(200, { ok: true });
+      }
+
+      case "loadPostings": {
+        const { data, error } = await sb.from("kudos_postings")
+          .select("*").order("range_start", { ascending: false }).limit(60);
+        if (error) throw error;
+        return json(200, { postings: data ?? [] });
+      }
+
+      // Written only when an admin confirms a posting went out, so trying an
+      // export does not make the week look covered.
+      case "insertPosting": {
+        const { range_start, range_end, recognition_count, note } = payload;
+        if (!range_start || !range_end) {
+          return json(400, { error: "Missing range_start or range_end" });
+        }
+        if (range_end < range_start) {
+          return json(400, { error: "range_end is before range_start" });
+        }
+        const { error } = await sb.from("kudos_postings").insert({
+          range_start,
+          range_end,
+          recognition_count: recognition_count ?? null,
+          note: note ?? null,
+        });
         if (error) throw error;
         return json(200, { ok: true });
       }
