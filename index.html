@@ -651,9 +651,14 @@
       const loadSettings = async () => {
         const { data } = await supabase.from('recognition_settings').select('*').in('key', ['tv_display_days', 'tv_slide_seconds']);
         if (data) {
+          // A blank or junk setting used to become NaN here, which made the
+          // window date Invalid and threw inside loadRecs — the TV then looped
+          // the filler slides forever with nobody's recognition on it and no
+          // error anywhere. Keep the working default instead.
+          const posInt = (v) => { const n = parseInt(v, 10); return Number.isFinite(n) && n > 0 ? n : null; };
           data.forEach(row => {
-            if (row.key === 'tv_display_days') setDays(parseInt(row.value));
-            if (row.key === 'tv_slide_seconds') setSlideSec(parseInt(row.value));
+            if (row.key === 'tv_display_days') { const n = posInt(row.value); if (n) setDays(n); }
+            if (row.key === 'tv_slide_seconds') { const n = posInt(row.value); if (n) setSlideSec(n); }
           });
         }
       };
@@ -665,13 +670,18 @@
       }, [days]);
 
       const loadRecs = async () => {
-        const since = new Date(Date.now() - days * 86400000).toISOString();
-        const { data } = await supabase.from('recognitions')
+        // Belt and braces: the TV runs unattended on a wall, so a bad value
+        // must never be able to blank it.
+        const d = Number.isFinite(days) && days > 0 ? days : 14;
+        const since = new Date(Date.now() - d * 86400000).toISOString();
+        const { data, error } = await supabase.from('recognitions')
           .select('*, recognition_sites(name)')
           .eq('approved', true)
           .gte('created_at', since)
           .order('created_at', { ascending: false });
-        setRecs(data || []);
+        // Keep whatever is already on screen if a refresh fails, rather than
+        // wiping the wall because one poll timed out.
+        if (!error) setRecs(data || []);
       };
 
       // Animation & layout rotation
@@ -1080,6 +1090,38 @@
     // hard-codes that pairing.
     const SITE_LABELS = { ROC: 'Rochester', SLC: 'Salt Lake City', Remote: 'Remote', SD: 'San Diego' };
     const SITE_ORDER = ['ROC', 'SLC', 'Remote', 'SD'];
+    // Every reporting window is anchored to one timezone for the whole
+    // program. Built from the admin's own machine, the same recognition landed
+    // in Q3 for Salt Lake and Q4 for Rochester, and a week picked in Rochester
+    // covered a different band of hours than the same week picked in Salt Lake
+    // — which left an uncovered gap between consecutive weekly postings.
+    const PROGRAM_TZ = 'America/Denver';
+    const PROGRAM_TZ_LABEL = 'Mountain Time';
+
+    // How far the program timezone is from UTC at a given instant (DST-aware).
+    const tzOffsetMs = (date, tz) => {
+      const parts = Object.fromEntries(
+        new Intl.DateTimeFormat('en-US', {
+          timeZone: tz, hour12: false,
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', second: '2-digit',
+        }).formatToParts(date)
+          .filter(p => p.type !== 'literal')
+          .map(p => [p.type, p.value]));
+      const asUTC = Date.UTC(+parts.year, +parts.month - 1, +parts.day,
+        (+parts.hour) % 24, +parts.minute, +parts.second);
+      return asUTC - date.getTime();
+    };
+
+    // The UTC instant at which the given calendar day starts in PROGRAM_TZ.
+    // Two passes so a boundary that falls on a DST change still converges.
+    const zonedDayStartISO = (y, monthIdx, day, tz = PROGRAM_TZ) => {
+      const wall = Date.UTC(y, monthIdx, day, 0, 0, 0);
+      let ts = wall;
+      for (let i = 0; i < 2; i++) ts = wall - tzOffsetMs(new Date(ts), tz);
+      return new Date(ts).toISOString();
+    };
+
     const SITES_KEY = 'canyon_kudos_draw_sites';
     const DRAW_MODE_KEY = 'canyon_kudos_draw_mode';
     // Past this many names a wheel's slices are too thin to read from the back
@@ -1161,9 +1203,10 @@
         </div>
       );
     }
-    // Only sites that map onto a wheel. Someone based anywhere else has to be
-    // pointed at whichever meeting they will actually attend.
-    const ASSIGNABLE = ['ROC', 'SLC', 'Remote', 'EXCLUDE'];
+    // Every real site is assignable, San Diego included — SD gets its own
+    // checkbox as soon as somebody there is nominated, so omitting it left an
+    // unmatched San Diego employee with no correct answer to pick.
+    const ASSIGNABLE = [...SITE_ORDER, 'EXCLUDE'];
 
     /**
      * The draw display for larger pools. Everyone stays on screen for the whole
@@ -1243,6 +1286,7 @@
         return ['ROC'];
       });
       const [pool, setPool] = useState([]);
+      const [excluded, setExcluded] = useState([]);
       const [recCount, setRecCount] = useState(0);
       const [loading, setLoading] = useState(false);
       const [loadError, setLoadError] = useState('');
@@ -1269,13 +1313,16 @@
       const loadPool = async () => {
         const [y, q] = quarter.split('-Q');
         const qNum = parseInt(q);
-        const start = new Date(parseInt(y), (qNum-1)*3, 1).toISOString();
-        const end = new Date(parseInt(y), qNum*3, 1).toISOString();
+        // Quarter edges in the program timezone, not the admin's — Date.UTC
+        // rolls month 12 into January of the next year on its own.
+        const start = zonedDayStartISO(parseInt(y), (qNum-1)*3, 1);
+        const end = zonedDayStartISO(parseInt(y), qNum*3, 1);
         setLoading(true);
         setLoadError('');
         try {
           const res = await adminCall('loadDrawingPool', { start, end });
           setPool(res.pool || []);
+          setExcluded(res.excluded || []);
           setRecCount(res.recognitionCount || 0);
         } catch (e) {
           if (!e.unauthorized) { console.error(e); setLoadError(e.message || 'Could not load the drawing pool.'); }
@@ -1322,6 +1369,7 @@
         try {
           await adminCall('setPersonSite', {
             aliasKeys: person.aliasKeys,
+            personId: person.id,
             site: site ?? person.site,
             displayName: displayName ?? null,
           });
@@ -1334,6 +1382,17 @@
       // Names come off the HR roster, which carries the legal name — the wheel
       // would say "Songlee Rich" for someone the whole room calls Bo. This is
       // going on a screen in front of the site, so let an admin fix it.
+      // Hands someone back to the HR roster: drops the manual site and any
+      // renamed display, so an exclusion can be undone and a stale site heals.
+      const clearOverride = async (person) => {
+        try {
+          await adminCall('clearPersonSite', { aliasKeys: person.aliasKeys });
+          await loadPool();
+        } catch (e) {
+          if (!e.unauthorized) alert('Could not restore: ' + (e.message || e));
+        }
+      };
+
       const renamePerson = (person) => {
         const next = window.prompt(
           `Name to show on the wheel${person.raw !== person.name ? ` (nominated as "${person.raw}")` : ''}:`,
@@ -1579,6 +1638,27 @@
               </div>
             </div>
 
+            {excluded.length > 0 && (
+              <div className="card" style={{ borderLeft: '4px solid #94a3b8' }}>
+                <h3 style={{ marginBottom: 6 }}>Skipped ({excluded.length})</h3>
+                <p style={{ fontSize: 13, color: 'var(--canyon-muted)', marginBottom: 16 }}>
+                  Marked as not an employee, so they're on no wheel. Restore anyone who
+                  should be back in — a contractor later hired on, for instance.
+                </p>
+                {excluded.map(p => (
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                           gap: 12, padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
+                    <div>
+                      <strong>{p.name}</strong>
+                      <span style={{ fontSize: 12, color: 'var(--canyon-muted)' }}> · nominated as "{p.raw}"</span>
+                    </div>
+                    <button className="btn btn-sm" onClick={() => clearOverride(p)}
+                      style={{ background: '#f1f5f9', color: 'var(--canyon-navy)' }}>Restore</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {unplaced.length > 0 && (
               <div className="card" style={{ borderLeft: '4px solid #D14124' }}>
                 <h3 style={{ marginBottom: 6 }}>Needs a site ({unplaced.length})</h3>
@@ -1662,16 +1742,24 @@
         }
       };
 
+      // These drive an unattended wall display, so refuse to store a value
+      // that would blank it rather than reporting a successful save.
+      const posInt = (v) => { const n = parseInt(v, 10); return Number.isFinite(n) && n > 0 ? n : null; };
+
       const saveTvDays = async () => {
+        const n = posInt(tvDays);
+        if (!n) { alert('Enter a number of days greater than zero.'); return; }
         setSaving(true);
-        try { await adminCall('updateSetting', { key: 'tv_display_days', value: tvDays }); }
+        try { await adminCall('updateSetting', { key: 'tv_display_days', value: String(n) }); }
         catch (e) { if (!e.unauthorized) alert(e.message); }
         setSaving(false);
       };
 
       const saveTvSlide = async () => {
+        const n = posInt(tvSlide);
+        if (!n) { alert('Enter a number of seconds greater than zero.'); return; }
         setSavingSlide(true);
-        try { await adminCall('upsertSetting', { key: 'tv_slide_seconds', value: tvSlide }); }
+        try { await adminCall('upsertSetting', { key: 'tv_slide_seconds', value: String(n) }); }
         catch (e) { if (!e.unauthorized) alert(e.message); }
         setSavingSlide(false);
       };
@@ -2270,12 +2358,15 @@
         if (invalid) { setRecs([]); setLoading(false); return; }
         const seq = ++loadSeq.current;
         setLoading(true); setStatus('');
-        const start = parseYMD(from);
-        const end = addDays(parseYMD(to), 1); // exclusive upper bound
+        // Day edges in the program timezone so the same picked week means the
+        // same hours whoever runs it, and consecutive weeks abut exactly.
+        const f = parseYMD(from), t = addDays(parseYMD(to), 1); // exclusive upper bound
+        const start = zonedDayStartISO(f.getFullYear(), f.getMonth(), f.getDate());
+        const end = zonedDayStartISO(t.getFullYear(), t.getMonth(), t.getDate());
         const { data, error } = await supabase.from('recognitions').select('*, recognition_sites(name)')
           .eq('approved', true)
-          .gte('created_at', start.toISOString())
-          .lt('created_at', end.toISOString())
+          .gte('created_at', start)
+          .lt('created_at', end)
           .order('created_at', { ascending: true });
         if (seq !== loadSeq.current) return;   // a newer request already answered
         if (error) {
@@ -2346,20 +2437,40 @@
             doc.setTextColor(255, 255, 255);
             doc.text(pill, M + CW - pw + 10, y + 0.5);
 
-            doc.setTextColor(...PDF_NAVY);
-            doc.setFont('helvetica', 'bold'); doc.setFontSize(14);
-            m.nameLines.forEach((ln, i) => doc.text(ln, M, y + i * 17));
-            let cy = y + (m.nameLines.length - 1) * 17 + 15;
+            // A long write-up can be taller than a whole page, and the caller's
+            // single page-break check cannot help once that happens — the rest
+            // was being drawn past the bottom edge, taking any names in the
+            // tail of the text with it. So each line checks for itself.
+            let cy = y;
+            const flow = (lineH, restyle) => {
+              if (cy + lineH > BOTTOM) { doc.addPage(); cy = contBar(); restyle(); }
+            };
 
-            doc.setTextColor(...PDF_MUTED);
-            doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+            const nameStyle = () => {
+              doc.setTextColor(...PDF_NAVY);
+              doc.setFont('helvetica', 'bold'); doc.setFontSize(14);
+            };
+            nameStyle();
+            m.nameLines.forEach((ln) => { flow(17, nameStyle); doc.text(ln, M, cy); cy += 17; });
+            cy = cy - 17 + 15;
+
+            const metaStyle = () => {
+              doc.setTextColor(...PDF_MUTED);
+              doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+            };
+            metaStyle(); flow(16, metaStyle);
             doc.text(pdfSafe(nominatorLine(r)), M, cy);
             cy += 16;
 
-            doc.setTextColor(...PDF_INK); doc.setFontSize(10.5);
-            m.descLines.forEach((ln, i) => doc.text(ln, M, cy + i * 14.5));
-            cy += (m.descLines.length - 1) * 14.5 + 18;
+            const bodyStyle = () => {
+              doc.setTextColor(...PDF_INK);
+              doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5);
+            };
+            bodyStyle();
+            m.descLines.forEach((ln) => { flow(14.5, bodyStyle); doc.text(ln, M, cy); cy += 14.5; });
+            cy += 3.5;   // keeps the original gap: (n-1)*14.5 + 18
 
+            if (cy > BOTTOM) { doc.addPage(); cy = contBar(); }
             doc.setDrawColor(226, 232, 240); doc.setLineWidth(0.7);
             doc.line(M, cy, M + CW, cy);
             return cy + 24;
@@ -2555,7 +2666,9 @@
                              border: '1px solid #cbd5e1', fontWeight: 600 }}>
                     {alreadyPosted ? '✓ Recorded as posted' : busy === 'mark' ? 'Recording…' : 'Mark as posted'}
                   </button>
-                  <span style={{ fontSize: 13, color: 'var(--canyon-muted)' }}>{subtitle}</span>
+                  <span style={{ fontSize: 13, color: 'var(--canyon-muted)' }}>
+                    {subtitle} · days run {PROGRAM_TZ_LABEL}
+                  </span>
                 </div>
               </>
             )}

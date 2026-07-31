@@ -133,20 +133,27 @@ Deno.serve(async (req) => {
             .select("id, recipient_name, core_value")
             .eq("approved", true).gte("created_at", start).lt("created_at", end),
           sb.rpc("kudos_roster"),
-          sb.from("kudos_person_alias").select("alias_key, display_name, site"),
+          sb.from("kudos_person_alias").select("alias_key, display_name, site, person_id"),
         ]);
         if (recRes.error) throw recRes.error;
         if (rosterRes.error) throw rosterRes.error;
         if (aliasRes.error) throw aliasRes.error;
 
-        const pool = buildPool(
+        const all = buildPool(
           recRes.data ?? [],
           rosterRes.data ?? [],
           aliasRes.data ?? [],
-        ).filter((p) => p.site !== "EXCLUDE");
+        );
+        // Excluded people are returned rather than dropped. Removing somebody
+        // from every wheel is a decision worth being able to see and undo —
+        // silently filtering it here meant a contractor later hired onto the
+        // roster stayed invisible with nothing to click.
+        const pool = all.filter((p) => p.site !== "EXCLUDE");
+        const excluded = all.filter((p) => p.site === "EXCLUDE");
 
         return json(200, {
           pool,
+          excluded,
           meetings: MEETINGS,
           recognitionCount: (recRes.data ?? []).length,
         });
@@ -155,24 +162,51 @@ Deno.serve(async (req) => {
       // Admin assigns (or corrects) someone's site. Written against every
       // spelling of the name seen so far, so the fix sticks next quarter too.
       case "setPersonSite": {
-        const { aliasKeys, site, displayName, note } = payload;
+        const { aliasKeys, site, displayName, note, personId } = payload;
         const keys: string[] = (aliasKeys ?? []).map((k: string) => norm(k)).filter(Boolean);
         if (!keys.length) return json(400, { error: "Missing aliasKeys" });
-        const allowed = [...Object.keys(MEETINGS), "Remote", "SD", "EXCLUDE"];
+        // SITE_ORDER on the client offers every real site, so accept them all
+        // — San Diego included, which the old list omitted even though SD gets
+        // its own checkbox as soon as somebody from there is nominated.
+        const allowed = ["ROC", "SLC", "Remote", "SD", "EXCLUDE"];
         if (site !== null && !allowed.includes(site)) {
           return json(400, { error: "Invalid site: " + site });
         }
+
+        // Renaming and re-siting are separate acts. Writing display_name on
+        // every call would wipe a correction made earlier.
+        const { data: existing, error: readErr } = await sb
+          .from("kudos_person_alias").select("alias_key, display_name").in("alias_key", keys);
+        if (readErr) throw readErr;
+        const priorName = new Map((existing ?? []).map((r: any) => [r.alias_key, r.display_name]));
+
         const now = new Date().toISOString();
         const { error } = await sb.from("kudos_person_alias").upsert(
           keys.map((alias_key) => ({
             alias_key,
             site,
-            display_name: displayName ?? null,
+            display_name: displayName !== undefined && displayName !== null
+              ? displayName
+              : (priorName.get(alias_key) ?? null),
+            // Binds the override to the person it was made for, so it goes
+            // inert if that spelling later resolves to somebody else.
+            person_id: personId ?? null,
             note: note ?? null,
             updated_at: now,
           })),
           { onConflict: "alias_key" },
         );
+        if (error) throw error;
+        return json(200, { ok: true });
+      }
+
+      // Drops every manual override for a person, handing them back to the HR
+      // roster. This is how an exclusion is undone.
+      case "clearPersonSite": {
+        const keys: string[] = (payload?.aliasKeys ?? [])
+          .map((k: string) => norm(k)).filter(Boolean);
+        if (!keys.length) return json(400, { error: "Missing aliasKeys" });
+        const { error } = await sb.from("kudos_person_alias").delete().in("alias_key", keys);
         if (error) throw error;
         return json(200, { ok: true });
       }

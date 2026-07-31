@@ -326,6 +326,13 @@ export type Alias = {
   alias_key: string;
   display_name: string | null;
   site: string | null;
+  /**
+   * The pool identity this alias was created for. An alias is keyed on the
+   * name as typed, which is not an identity — a bare "Katie" corrected once
+   * would otherwise follow that spelling onto whichever employee is nominated
+   * as "Katie" next. NULL means unbound (legacy) and still applies.
+   */
+  person_id?: string | null;
 };
 
 /**
@@ -353,13 +360,35 @@ export function buildPool(
       const aliasKey = norm(rawName);
       if (!aliasKey) continue;
 
-      const alias = aliasBy.get(aliasKey);
+      const rawAlias = aliasBy.get(aliasKey);
       const { entry, confidence } = matchPerson(rawName, ix);
 
       // Identity, not spelling. Two nominations that resolve to the same
       // roster row are the same person and share one slice.
       const id = entry ? `roster:${norm(entry.full_name)}` : `raw:${aliasKey}`;
-      const conf: Confidence = alias ? "manual" : confidence;
+
+      // An alias bound to a different identity is stale: the spelling it was
+      // written for now belongs to somebody else, so it must not lend them a
+      // name or a site.
+      const alias = rawAlias && rawAlias.person_id && rawAlias.person_id !== id
+        ? undefined
+        : rawAlias;
+
+      // The HR roster is live and wins on site; an alias only decides where
+      // someone sits when the roster cannot place them at all.
+      //
+      // An alias is keyed on the name as typed, which is not an identity — a
+      // bare "Katie" assigned once would otherwise follow that spelling onto
+      // whichever employee is nominated as "Katie" next, taking its site with
+      // it. It would also outrank the roster forever, so correcting somebody's
+      // displayed name once would freeze their site and keep drawing them at
+      // the meeting they used to attend after a transfer.
+      const siteFromAlias = !entry && alias?.site ? alias.site : null;
+      const site = entry?.site ?? siteFromAlias ?? null;
+      // EXCLUDE is a decision about a person, not about a site, so it applies
+      // either way — but it is surfaced rather than silently dropped.
+      const conf: Confidence = siteFromAlias || alias?.site === "EXCLUDE" ? "manual" : confidence;
+      const effectiveSite = alias?.site === "EXCLUDE" ? "EXCLUDE" : site;
 
       const existing = byId.get(id);
       if (existing) {
@@ -371,7 +400,9 @@ export function buildPool(
         // A later, better-evidenced spelling upgrades the entry.
         if (rank[conf] > rank[existing.confidence]) {
           existing.confidence = conf;
-          if (alias?.site ?? entry?.site) existing.site = alias?.site ?? entry?.site ?? null;
+          if (effectiveSite) existing.site = effectiveSite;
+        } else if (!existing.site && effectiveSite) {
+          existing.site = effectiveSite;
         }
         continue;
       }
@@ -385,7 +416,7 @@ export function buildPool(
         name: display,
         aliasKeys: [aliasKey],
         raw: rawName,
-        site: alias?.site ?? entry?.site ?? null,
+        site: effectiveSite,
         confidence: conf,
         matchedTo: entry && norm(entry.full_name) !== aliasKey ? tidyName(entry.full_name) : null,
         recognitionIds: [rec.id],
