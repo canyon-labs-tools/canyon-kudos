@@ -221,6 +221,21 @@
     .onscreen-name { font-size: 19px; font-weight: 800; color: var(--canyon-navy); margin-bottom: 8px; }
     .onscreen-meta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 12px; color: var(--canyon-muted); margin-bottom: 10px; }
     .onscreen-desc { font-size: 14px; line-height: 1.55; color: #334155; }
+    /* Bracelet Awards page — the posting as a shareable page. Same card as the
+       admin on-screen view so the two cannot drift apart. */
+    /* Wider than the standard page: this one is meant to be read across a room
+       or projected, and the 720px column forces everything into one file. */
+    .page.page-wide { max-width: 1200px; }
+    .awards-bar { display: flex; align-items: flex-end; justify-content: space-between;
+                  gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+    .awards-controls { display: flex; gap: 8px; flex-wrap: wrap; }
+    .awards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+                   gap: 16px; align-items: start; }
+    @media print {
+      .awards-grid { grid-template-columns: repeat(2, 1fr); }
+      .awards-bar { display: none; }
+    }
+
     @media print {
       .onscreen-view { position: static; }
       .onscreen-head { background: #272E72 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -388,6 +403,7 @@
           </div>
           <div className="nav-links">
             <button className={`nav-link ${page==='submit'?'active':''}`} onClick={()=>setPage('submit')}>Give Recognition</button>
+            <button className={`nav-link ${page==='awards'?'active':''}`} onClick={()=>setPage('awards')}>Bracelet Awards</button>
             <button className={`nav-link ${page==='feed'?'active':''}`} onClick={()=>setPage('feed')}>Feed</button>
             <button className={`nav-link ${page==='tv'?'active':''}`} onClick={()=>setPage('tv')}>TV Display</button>
             <button className={`nav-link ${page==='admin'?'active':''}`} onClick={()=>setPage('admin')}>Admin</button>
@@ -2579,20 +2595,7 @@
                 style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none' }}>Close</button>
             </div>
             <div className="onscreen-body">
-              {recs.map(r => (
-                <div key={r.id} className="onscreen-card">
-                  <div className="onscreen-name">{tidyName(r.recipient_name)}</div>
-                  <div className="onscreen-meta">
-                    <span className={'value-pill ' + VALUE_CLASS(r.core_value)}
-                      style={{ padding: '3px 12px', fontSize: 12 }}>
-                      {VALUE_ICONS[r.core_value]} {r.core_value}
-                    </span>
-                    <span>{nominatorLine(r)}</span>
-                    <span>{new Date(r.created_at).toLocaleDateString()}</span>
-                  </div>
-                  <div className="onscreen-desc">{collapse(r.description)}</div>
-                </div>
-              ))}
+              {recs.map(r => <AwardCard key={r.id} rec={r} />)}
             </div>
           </div>
         );
@@ -2694,14 +2697,156 @@
     // ═══════════════════════════════════════════════════════════
     // APP ROOT
     // ═══════════════════════════════════════════════════════════
+    // BRACELET AWARDS — the weekly posting, readable by anyone signed in
+    // ═══════════════════════════════════════════════════════════
+
+    // One recognition, laid out the way the slide deck and the emailed posting
+    // lay it out. Shared so the three never drift apart.
+    function AwardCard({ rec }) {
+      return (
+        <div className="onscreen-card">
+          <div className="onscreen-name">{tidyName(rec.recipient_name)}</div>
+          <div className="onscreen-meta">
+            <span className={'value-pill ' + VALUE_CLASS(rec.core_value)}
+              style={{ padding: '3px 12px', fontSize: 12 }}>
+              {VALUE_ICONS[rec.core_value]} {rec.core_value}
+            </span>
+            <span>{nominatorLine(rec)}</span>
+            <span>{new Date(rec.created_at).toLocaleDateString()}</span>
+          </div>
+          <div className="onscreen-desc">{collapse(rec.description)}</div>
+        </div>
+      );
+    }
+
+    /**
+     * The posting as a page anyone can open, rather than something only an
+     * admin could generate as a file. The week lives in the URL, so the
+     * address bar is always a link worth sending — "here's last week's" needs
+     * no attachment and no export step.
+     */
+    function AwardsPage({ initialWeek }) {
+      // Normalised to midnight. mondayOf() preserves the time of day, so a
+      // week derived a few seconds earlier would compare as "before" the
+      // current one and leave the Later button enabled at the end of history.
+      const midnight = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+      const currentMonday = () => midnight(mondayOf(new Date()));
+      const lastCompletedMonday = () => addDays(currentMonday(), -7);
+      const [monday, setMonday] = useState(() => {
+        if (initialWeek) {
+          const d = parseYMD(initialWeek);
+          if (!isNaN(d.getTime())) return midnight(mondayOf(d));
+        }
+        return lastCompletedMonday();
+      });
+      const [recs, setRecs] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [loadError, setLoadError] = useState('');
+      const [copied, setCopied] = useState(false);
+      const seq = useRef(0);
+
+      const sunday = addDays(monday, 6);
+      const thisMonday = currentMonday();
+      const isCurrentWeek = fmtYMD(monday) === fmtYMD(thisMonday);
+      const atLatest = monday.getTime() >= thisMonday.getTime();
+
+      // Keep the address bar pointing at whatever is on screen, so copying it
+      // always shares the week the reader is actually looking at.
+      useEffect(() => {
+        const url = `${location.pathname}?view=awards&week=${fmtYMD(monday)}`;
+        window.history.replaceState(null, '', url);
+        setCopied(false);
+        load();
+      }, [monday]);
+
+      const load = async () => {
+        const mine = ++seq.current;
+        setLoading(true); setLoadError('');
+        const start = zonedDayStartISO(monday.getFullYear(), monday.getMonth(), monday.getDate());
+        const endD = addDays(sunday, 1);
+        const end = zonedDayStartISO(endD.getFullYear(), endD.getMonth(), endD.getDate());
+        const { data, error } = await supabase.from('recognitions')
+          .select('*, recognition_sites(name)')
+          .eq('approved', true)
+          .gte('created_at', start).lt('created_at', end)
+          .order('created_at', { ascending: true });
+        if (mine !== seq.current) return;
+        if (error) setLoadError(error.message || 'Could not load this week.');
+        else setRecs(data || []);
+        setLoading(false);
+      };
+
+      const copyLink = async () => {
+        const url = `${location.origin}${location.pathname}?view=awards&week=${fmtYMD(monday)}`;
+        try { await navigator.clipboard.writeText(url); setCopied(true); }
+        catch (_) { window.prompt('Copy this link:', url); }
+      };
+
+      return (
+        <div className="page page-wide">
+          <div className="awards-bar no-print">
+            <div>
+              <h1 className="page-title" style={{ marginBottom: 2 }}>Bracelet Awards</h1>
+              <p className="page-subtitle" style={{ margin: 0 }}>
+                {rangeLabel(monday, sunday)}
+                {isCurrentWeek && <span style={{ color: 'var(--canyon-gold, #D14124)' }}> · in progress</span>}
+              </p>
+            </div>
+            <div className="awards-controls">
+              <button className="btn btn-secondary btn-sm" onClick={() => setMonday(addDays(monday, -7))}
+                title="Previous week">‹ Earlier</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setMonday(addDays(monday, 7))}
+                disabled={atLatest} title="Next week">Later ›</button>
+              {fmtYMD(monday) !== fmtYMD(lastCompletedMonday()) && (
+                <button className="btn btn-secondary btn-sm" onClick={() => setMonday(lastCompletedMonday())}>
+                  Last week
+                </button>
+              )}
+              <button className="btn btn-secondary btn-sm" onClick={copyLink}>
+                {copied ? '✓ Link copied' : '🔗 Copy link'}
+              </button>
+              <button className="btn btn-secondary btn-sm" onClick={() => window.print()}>🖨️ Print</button>
+            </div>
+          </div>
+
+          {loadError ? (
+            <p style={{ color: '#9D2235', fontWeight: 600 }}>
+              ⚠ {loadError} <button className="btn btn-sm" onClick={load} style={{ marginLeft: 8 }}>Retry</button>
+            </p>
+          ) : loading ? (
+            <p style={{ color: 'var(--canyon-muted)' }}>Loading…</p>
+          ) : recs.length === 0 ? (
+            <p style={{ color: 'var(--canyon-muted)', textAlign: 'center', padding: 40 }}>
+              No recognitions were submitted in this week.<br />
+              <span style={{ fontSize: 13 }}>Use “Earlier” to look back, or go and recognize someone.</span>
+            </p>
+          ) : (
+            <>
+              <p style={{ fontSize: 13, color: 'var(--canyon-muted)', marginBottom: 16 }}>
+                {recs.length} recognition{recs.length !== 1 ? 's' : ''}
+              </p>
+              <div className="awards-grid">
+                {recs.map(r => <AwardCard key={r.id} rec={r} />)}
+              </div>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════
     function App() {
       const [page, setPage] = useState('submit');
       const [sites, setSites] = useState([]);
+      const [awardsWeek, setAwardsWeek] = useState(null);
 
-      // Check URL params for TV mode
+      // Deep links: ?view=tv for the wall display, ?view=awards&week=YYYY-MM-DD
+      // so a posting can be shared as a plain URL.
       useEffect(() => {
         const params = new URLSearchParams(window.location.search);
-        if (params.get('view') === 'tv') setPage('tv');
+        const v = params.get('view');
+        if (v === 'tv') setPage('tv');
+        if (v === 'awards') { setAwardsWeek(params.get('week')); setPage('awards'); }
       }, []);
 
       useEffect(() => { loadSites(); }, []);
@@ -2728,6 +2873,7 @@
         <div>
           <Nav page={page} setPage={setPage} />
           {page === 'submit' && <SubmitPage sites={sites} />}
+          {page === 'awards' && <AwardsPage initialWeek={awardsWeek} />}
           {page === 'feed' && <FeedPage sites={sites} />}
           {page === 'admin' && <AdminPage sites={sites} reloadSites={loadSites} />}
         </div>
