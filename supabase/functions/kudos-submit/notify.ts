@@ -31,19 +31,27 @@ export function escHtml(s: string): string {
     .replaceAll("'", "&#39;");
 }
 
+// The description is typed by anyone on a public form, and mail clients turn
+// web addresses into clickable links. Strip them so the kudos mailbox can't be
+// used to deliver a link; the full text is on the board.
+const LINKISH = /\b(?:https?:\/\/|www\.)\S+|\b[\w-]+(?:\.[\w-]+)*\.(?:com|net|org|io|co|us|info|biz|xyz|app|dev|link|ly|me|site|online|top|click)\b\S*/gi;
+export function stripLinks(s: string): string {
+  return s.replace(LINKISH, "[link removed]");
+}
+
 export function firstName(full: string): string {
   return full.trim().split(/\s+/)[0] || full;
 }
 
 export function buildEmail(n: Nominee, r: Recognition, siteUrl: string) {
   const from = r.nominator && r.nominator !== "Anonymous"
-    ? escHtml(r.nominator)
+    ? escHtml(stripLinks(r.nominator))
     : "A colleague";
   const subject = `You've been recognized for ${r.value}`;
   const html = `<div style="font-family:'Segoe UI',Arial,sans-serif;font-size:15px;color:#1f2937;max-width:560px">
 <p>Hi ${escHtml(firstName(n.name))},</p>
 <p>${from} just recognized you for the Canyon Labs core value <strong>${escHtml(r.value)}</strong>.</p>
-<blockquote style="margin:16px 0;padding:12px 16px;border-left:4px solid #272E72;background:#f5f6fb;white-space:pre-wrap">${escHtml(r.description)}</blockquote>
+<blockquote style="margin:16px 0;padding:12px 16px;border-left:4px solid #272E72;background:#f5f6fb;white-space:pre-wrap">${escHtml(stripLinks(r.description))}</blockquote>
 <p>Your recognition is on the Canyon Kudos board and goes into this week's Bracelet Awards.</p>
 <p><a href="${escHtml(siteUrl)}" style="color:#272E72;font-weight:600">See the Kudos board</a></p>
 <p style="color:#6b7280;font-size:13px">Thank you for what you do.</p>

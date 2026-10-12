@@ -22,6 +22,11 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+// The form is public, so cap how much mail it can cause. The busiest hour on
+// record had 6 submissions.
+const MAX_SUBMISSIONS_PER_HOUR_FOR_EMAIL = 20;
+const MAX_EMAILS_PER_PERSON_PER_DAY = 3;
+
 const CORE_VALUES = ["Innovation", "Integrity", "Hard Work", "Teamwork", "Passion"];
 const MAX_LEN = 2000;
 
@@ -30,6 +35,36 @@ function json(status: number, body: any) {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+}
+
+// Keeps only people whose name is in the posted recipient text (so the email
+// matches the board), and applies the rate caps. Counts include this submission.
+async function allowedNominees(sb: any, nominees: { name: string; email: string }[], recipient: string) {
+  if (nominees.length === 0) return nominees;
+  const lower = recipient.toLowerCase();
+  const named = nominees.filter((n) => lower.includes(n.name.toLowerCase()));
+  if (named.length === 0) return named;
+
+  const hourAgo = new Date(Date.now() - 3600_000).toISOString();
+  const { count: lastHour } = await sb.from("recognitions")
+    .select("id", { count: "exact", head: true }).gte("created_at", hourAgo);
+  if ((lastHour ?? 0) > MAX_SUBMISSIONS_PER_HOUR_FOR_EMAIL) {
+    console.warn("kudos-submit: hourly email cap reached, skipped", { lastHour });
+    return [];
+  }
+
+  const dayAgo = new Date(Date.now() - 86400_000).toISOString();
+  const out = [];
+  for (const n of named) {
+    const pattern = "%" + n.name.replace(/[\\%_]/g, (c) => "\\" + c) + "%";
+    const { count } = await sb.from("recognitions")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", dayAgo).ilike("recipient_name", pattern);
+    if ((count ?? 0) > MAX_EMAILS_PER_PERSON_PER_DAY) {
+      console.warn("kudos-submit: daily per-person cap reached, skipped one");
+    } else out.push(n);
+  }
+  return out;
 }
 
 Deno.serve(async (req) => {
@@ -103,7 +138,7 @@ Deno.serve(async (req) => {
 
   let emailed = 0;
   try {
-    const nominees = await emailsFor(recipientIds);
+    const nominees = await allowedNominees(sb, await emailsFor(recipientIds), recipient);
     emailed = await notifyNominees(nominees, { nominator, value, description }, Deno.env);
     console.log("kudos-submit: nominee email", { picked: recipientIds.length, withEmail: nominees.length, sent: emailed });
   } catch (e) {
