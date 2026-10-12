@@ -8,7 +8,7 @@
 //
 // GET ?people=<text> powers the name picker on the form (see people.ts).
 // After a successful insert, everyone picked from the staff list gets an
-// email (see notify.ts). Email never fails the submission.
+// email (see notify.ts), sent after the response. Email never fails the submission.
 
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -136,14 +136,22 @@ Deno.serve(async (req) => {
     return json(500, { error: "Could not save recognition" });
   }
 
-  let emailed = 0;
-  try {
-    const nominees = await allowedNominees(sb, await emailsFor(recipientIds), recipient);
-    emailed = await notifyNominees(nominees, { nominator, value, description }, Deno.env);
-    console.log("kudos-submit: nominee email", { picked: recipientIds.length, withEmail: nominees.length, sent: emailed });
-  } catch (e) {
-    console.error("kudos-submit: nominee email error", { err: String(e) });
-  }
+  // The email takes a second or more (sign-in to Microsoft, one send per
+  // person), so it runs after the response: the person submitting doesn't wait.
+  const sendEmail = async () => {
+    try {
+      const nominees = await allowedNominees(sb, await emailsFor(recipientIds), recipient);
+      const sent = await notifyNominees(nominees, { nominator, value, description }, Deno.env);
+      console.log("kudos-submit: nominee email", { picked: recipientIds.length, withEmail: nominees.length, sent });
+    } catch (e) {
+      console.error("kudos-submit: nominee email error", { err: String(e) });
+    }
+  };
+  const runtime = (globalThis as any).EdgeRuntime;
+  if (recipientIds.length === 0) {
+    // Nothing to send.
+  } else if (runtime?.waitUntil) runtime.waitUntil(sendEmail());
+  else await sendEmail();
 
-  return json(200, { ok: true, status: "published", emailed });
+  return json(200, { ok: true, status: "published" });
 });
