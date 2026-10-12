@@ -5,13 +5,19 @@
 //
 // The browser calls this instead of inserting directly so that the
 // `recognitions` table itself stays closed to anonymous writes.
+//
+// GET ?people=<text> powers the name picker on the form (see people.ts).
+// After a successful insert, everyone picked from the staff list gets an
+// email (see notify.ts). Email never fails the submission.
 
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { emailsFor, MAX_RECIPIENTS, searchPeople } from "./people.ts";
+import { notifyNominees } from "./notify.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
 };
@@ -28,6 +34,18 @@ function json(status: number, body: any) {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  if (req.method === "GET") {
+    const q = new URL(req.url).searchParams.get("people");
+    if (q === null) return json(400, { error: "Missing people query" });
+    try {
+      return json(200, { people: await searchPeople(q) });
+    } catch (e) {
+      console.error("kudos-submit people lookup error", { err: String(e) });
+      return json(500, { error: "Lookup failed" });
+    }
+  }
+
   if (req.method !== "POST") return json(405, { error: "Method not allowed" });
 
   const sb = createClient(
@@ -50,6 +68,11 @@ Deno.serve(async (req) => {
   const value = String(body?.core_value ?? "").trim();
   const description = String(body?.description ?? "").trim();
   const site_id = body?.site_id || null;
+  const recipientIds: string[] = Array.isArray(body?.recipient_ids)
+    ? [...new Set(
+      body.recipient_ids.map((x: any) => String(x ?? "").trim()).filter((x: string) => x && x.length <= 50),
+    )] as string[]
+    : [];
 
   if (!recipient || !value || !description) {
     return json(400, { error: "Missing required fields" });
@@ -59,6 +82,9 @@ Deno.serve(async (req) => {
   }
   if (recipient.length > 200 || nominator.length > 200 || description.length > MAX_LEN) {
     return json(400, { error: "Field too long" });
+  }
+  if (recipientIds.length > MAX_RECIPIENTS) {
+    return json(400, { error: "Too many recipients" });
   }
 
   const { error } = await sb.from("recognitions").insert({
@@ -75,5 +101,14 @@ Deno.serve(async (req) => {
     return json(500, { error: "Could not save recognition" });
   }
 
-  return json(200, { ok: true, status: "published" });
+  let emailed = 0;
+  try {
+    const nominees = await emailsFor(recipientIds);
+    emailed = await notifyNominees(nominees, { nominator, value, description }, Deno.env);
+    console.log("kudos-submit: nominee email", { picked: recipientIds.length, withEmail: nominees.length, sent: emailed });
+  } catch (e) {
+    console.error("kudos-submit: nominee email error", { err: String(e) });
+  }
+
+  return json(200, { ok: true, status: "published", emailed });
 });
