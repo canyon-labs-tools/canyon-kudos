@@ -19,6 +19,7 @@ export type Recognition = {
   nominator: string;
   value: string;
   description: string;
+  subjectPrefix?: string; // e.g. "[SYSTEM CHECK] " from the admin system check
 };
 
 const DEFAULT_SITE_URL = "https://canyon-labs-kudos.azurewebsites.net";
@@ -70,7 +71,7 @@ export function buildEmail(n: Nominee, r: Recognition, siteUrl: string) {
   const from = r.nominator && r.nominator !== "Anonymous"
     ? escHtml(stripLinks(r.nominator))
     : "A colleague";
-  const subject = `You've been recognized for ${r.value}`;
+  const subject = `${r.subjectPrefix ?? ""}You've been recognized for ${r.value}`;
   const html = `<div style="font-family:'Segoe UI',Arial,sans-serif;font-size:15px;color:#1f2937;max-width:560px">
 <p>Hi ${escHtml(firstName(n.name))},</p>
 <p>${from} just recognized you for the Canyon Labs core value <strong>${escHtml(r.value)}</strong>.</p>
