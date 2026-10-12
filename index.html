@@ -65,6 +65,17 @@
     .form-input:focus, .form-select:focus, .form-textarea:focus { outline: none; border-color: var(--canyon-purple); box-shadow: 0 0 0 3px rgba(95,41,94,0.12); }
     .form-textarea { min-height: 100px; resize: vertical; }
 
+    /* Recipient picker */
+    .picker { position: relative; }
+    .picker-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    .picker-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 12px; border-radius: 99px; background: rgba(95,41,94,0.1); color: var(--canyon-purple); font-size: 14px; font-weight: 600; }
+    .picker-chip button { border: none; background: none; color: inherit; cursor: pointer; font-size: 16px; line-height: 1; padding: 0 4px; }
+    .picker-list { position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 4px); background: white; border: 1.5px solid #e2e8f0; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); list-style: none; margin: 0; padding: 4px; max-height: 280px; overflow-y: auto; }
+    .picker-item { padding: 8px 10px; border-radius: 6px; cursor: pointer; display: flex; justify-content: space-between; gap: 12px; font-size: 15px; }
+    .picker-item.active, .picker-item:hover { background: rgba(95,41,94,0.08); }
+    .picker-item small { color: var(--canyon-muted); }
+    .picker-hint { font-size: 12px; color: var(--canyon-muted); margin-top: 6px; }
+
     /* Value pills (radio group) */
     .value-pills { display: flex; flex-wrap: wrap; gap: 8px; }
     .value-pill { display: flex; align-items: center; gap: 6px; padding: 8px 16px; border: 2px solid #e2e8f0; border-radius: 99px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; background: white; }
@@ -511,15 +522,97 @@
     // ═══════════════════════════════════════════════════════════
     // SUBMIT RECOGNITION
     // ═══════════════════════════════════════════════════════════
+    // Type-ahead over the staff list. Picked people become chips (and get an email
+    // when the recognition posts); text left in the box is kept as a plain name.
+    function RecipientPicker({ picked, setPicked, text, setText }) {
+      const [matches, setMatches] = useState([]);
+      const [open, setOpen] = useState(false);
+      const [active, setActive] = useState(0);
+      const seq = useRef(0);
+
+      useEffect(() => {
+        const q = text.trim();
+        const n = ++seq.current;
+        if (q.length < 2) { setMatches([]); return; }
+        const t = setTimeout(async () => {
+          try {
+            const res = await fetch(SUPABASE_URL + '/functions/v1/kudos-submit?people=' + encodeURIComponent(q), {
+              headers: { 'Authorization': 'Bearer ' + SUPABASE_KEY, 'apikey': SUPABASE_KEY },
+            });
+            const data = await res.json();
+            if (n !== seq.current) return;
+            const ids = new Set(picked.map(p => p.id));
+            setMatches((data.people || []).filter(p => !ids.has(p.id)));
+            setActive(0);
+          } catch (_) { if (n === seq.current) setMatches([]); }
+        }, 200);
+        return () => clearTimeout(t);
+      }, [text, picked]);
+
+      const choose = (p) => {
+        setPicked([...picked, { id: p.id, name: p.name }]);
+        setText('');
+        setMatches([]);
+      };
+
+      const onKeyDown = (e) => {
+        if (!open || matches.length === 0) {
+          if (e.key === 'Backspace' && !text && picked.length) setPicked(picked.slice(0, -1));
+          return;
+        }
+        if (e.key === 'ArrowDown') { e.preventDefault(); setActive((active + 1) % matches.length); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((active - 1 + matches.length) % matches.length); }
+        else if (e.key === 'Enter') { e.preventDefault(); choose(matches[active]); }
+        else if (e.key === 'Escape') setOpen(false);
+      };
+
+      return (
+        <div className="picker">
+          {picked.length > 0 && (
+            <div className="picker-chips">
+              {picked.map(p => (
+                <span key={p.id} className="picker-chip">
+                  {p.name}
+                  <button type="button" aria-label={'Remove ' + p.name}
+                    onClick={() => setPicked(picked.filter(x => x.id !== p.id))}>×</button>
+                </span>
+              ))}
+            </div>
+          )}
+          <input className="form-input" autoComplete="off"
+            placeholder={picked.length ? 'Add another person (optional)' : 'Start typing a name'}
+            value={text}
+            onChange={e => { setText(e.target.value); setOpen(true); }}
+            onFocus={() => setOpen(true)}
+            onBlur={() => setTimeout(() => setOpen(false), 150)}
+            onKeyDown={onKeyDown} />
+          {open && matches.length > 0 && (
+            <ul className="picker-list" role="listbox">
+              {matches.map((p, i) => (
+                <li key={p.id} role="option" aria-selected={i === active}
+                  className={`picker-item ${i === active ? 'active' : ''}`}
+                  onMouseDown={e => { e.preventDefault(); choose(p); }}>
+                  <span>{p.name}</span>{p.site && <small>{p.site}</small>}
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="picker-hint">Pick from the list and they'll get an email letting them know.</div>
+        </div>
+      );
+    }
+
     function SubmitPage({ sites }) {
       const [form, setForm] = useState({ recipient: '', nominator: '', value: '', description: '', siteId: '' });
+      const [picked, setPicked] = useState([]);
+      const recipientName = [...picked.map(p => p.name), form.recipient.trim()].filter(Boolean).join(', ');
       const [submitting, setSubmitting] = useState(false);
       const [success, setSuccess] = useState(false);
       const [anonymous, setAnonymous] = useState(false);
 
       const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!form.recipient || (!anonymous && !form.nominator) || !form.value || !form.description) return;
+        if (!recipientName || (!anonymous && !form.nominator) || !form.value || !form.description) return;
         setSubmitting(true);
         // Route through the submit function rather than inserting directly —
         // it holds the service-role key, so the table stays closed to the browser.
@@ -533,7 +626,8 @@
               'apikey': SUPABASE_KEY,
             },
             body: JSON.stringify({
-              recipient_name: form.recipient.trim(),
+              recipient_name: recipientName,
+              recipient_ids: picked.map(p => p.id),
               nominator_name: anonymous ? 'Anonymous' : form.nominator.trim(),
               core_value: form.value,
               description: form.description.trim(),
@@ -547,6 +641,7 @@
         if (ok) {
           setSuccess(true);
           setForm({ recipient: '', nominator: '', value: '', description: '', siteId: '' });
+          setPicked([]);
         } else {
           alert('Sorry — your recognition could not be submitted. Please try again.');
         }
@@ -560,8 +655,8 @@
           <form className="card" onSubmit={handleSubmit}>
             <div className="form-group">
               <label className="form-label">Who are you recognizing?</label>
-              <input className="form-input" placeholder="Recipient's full name" value={form.recipient}
-                onChange={e => setForm({...form, recipient: e.target.value})} />
+              <RecipientPicker picked={picked} setPicked={setPicked}
+                text={form.recipient} setText={t => setForm(f => ({...f, recipient: t}))} />
             </div>
 
             <div className="form-group">
@@ -597,7 +692,7 @@
                 value={form.description} onChange={e => setForm({...form, description: e.target.value})} />
             </div>
 
-            <button type="submit" className="btn btn-primary btn-block" disabled={submitting || !form.recipient || !form.value || !form.description || (!anonymous && !form.nominator)}>
+            <button type="submit" className="btn btn-primary btn-block" disabled={submitting || !recipientName || !form.value || !form.description || (!anonymous && !form.nominator)}>
               {submitting ? 'Submitting...' : '⭐ Submit Recognition'}
             </button>
           </form>
