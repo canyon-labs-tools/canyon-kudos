@@ -8,10 +8,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"
-          integrity="sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk"
-          crossorigin="anonymous"></script>
   <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700;900&family=PT+Sans:wght@400;700&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -396,6 +392,32 @@
     const SUPABASE_URL = 'https://vnoaofrvtaallrbiggob.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZub2FvZnJ2dGFhbGxyYmlnZ29iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0Mzc3MjgsImV4cCI6MjA4OTAxMzcyOH0.T0VJH25VmTPLNfUQ1rCYrLI4vCEJLh2lABj_9l6_Cms';
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // ─── Slide and PDF libraries, loaded on first use ───────
+    // They are large and only the admin exports need them, so the page doesn't
+    // download them up front.
+    const LIBS = {
+      pptx: { src: 'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js', ready: () => typeof PptxGenJS !== 'undefined' },
+      jspdf: { src: 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js',
+        integrity: 'sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk',
+        ready: () => !!window.jspdf },
+    };
+    const libLoads = {};
+    function loadLib(name) {
+      const lib = LIBS[name];
+      if (lib.ready()) return Promise.resolve();
+      if (!libLoads[name]) {
+        libLoads[name] = new Promise((resolve, reject) => {
+          const el = document.createElement('script');
+          el.src = lib.src;
+          if (lib.integrity) { el.integrity = lib.integrity; el.crossOrigin = 'anonymous'; }
+          el.onload = () => (lib.ready() ? resolve() : reject(new Error(name + ' did not load')));
+          el.onerror = () => { delete libLoads[name]; el.remove(); reject(new Error(name + ' did not load')); };
+          document.head.appendChild(el);
+        });
+      }
+      return libLoads[name];
+    }
 
     // ─── Admin proxy (service-role-keyed Edge Function) ───────
     const ADMIN_FN_URL = SUPABASE_URL + '/functions/v1/kudos-admin';
@@ -2279,8 +2301,11 @@
       const slideCount = useMemo(() => planPages(recs).length, [recs]);
 
       const generatePptx = async () => {
-        if (!recs.length || typeof PptxGenJS === 'undefined') {
-          setStatus(typeof PptxGenJS === 'undefined' ? '⚠ Slide library failed to load — check your connection and retry.' : '');
+        if (!recs.length) return;
+        try {
+          await loadLib('pptx');
+        } catch (_) {
+          setStatus('⚠ Slide library failed to load — check your connection and retry.');
           return;
         }
         setGenerating(true);
@@ -2637,6 +2662,7 @@
         if (!recs.length) return;
         setBusy('pdf'); setStatus('');
         try {
+          await loadLib('jspdf');
           const { jsPDF } = window.jspdf;
           const doc = new jsPDF({ unit: 'pt', format: 'letter' });
           const PW = doc.internal.pageSize.getWidth();
