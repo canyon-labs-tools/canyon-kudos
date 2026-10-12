@@ -75,6 +75,10 @@
     .picker-item.active, .picker-item:hover { background: rgba(95,41,94,0.08); }
     .picker-item small { color: var(--canyon-muted); }
     .picker-hint { font-size: 12px; color: var(--canyon-muted); margin-top: 6px; }
+    .name-check { margin-top: 10px; padding: 12px 14px; border-radius: 10px; background: #fff7ed; border: 1px solid #fed7aa; font-size: 14px; }
+    .name-check-options { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px; }
+    .name-check-options .btn { padding: 6px 12px; font-size: 13px; }
+    .name-check-skip { margin-top: 8px; background: none; border: none; padding: 0; color: var(--canyon-muted); text-decoration: underline; cursor: pointer; font-size: 13px; }
 
     /* Value pills (radio group) */
     .value-pills { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -524,6 +528,13 @@
     // ═══════════════════════════════════════════════════════════
     // Type-ahead over the staff list. Picked people become chips (and get an email
     // when the recognition posts); text left in the box is kept as a plain name.
+    const findPeople = async (q) => {
+      const res = await fetch(SUPABASE_URL + '/functions/v1/kudos-submit?people=' + encodeURIComponent(q), {
+        headers: { 'Authorization': 'Bearer ' + SUPABASE_KEY, 'apikey': SUPABASE_KEY },
+      });
+      return (await res.json()).people || [];
+    };
+
     function RecipientPicker({ picked, setPicked, text, setText }) {
       const [matches, setMatches] = useState([]);
       const [open, setOpen] = useState(false);
@@ -536,13 +547,10 @@
         if (q.length < 2) { setMatches([]); return; }
         const t = setTimeout(async () => {
           try {
-            const res = await fetch(SUPABASE_URL + '/functions/v1/kudos-submit?people=' + encodeURIComponent(q), {
-              headers: { 'Authorization': 'Bearer ' + SUPABASE_KEY, 'apikey': SUPABASE_KEY },
-            });
-            const data = await res.json();
+            const people = await findPeople(q);
             if (n !== seq.current) return;
             const ids = new Set(picked.map(p => p.id));
-            setMatches((data.people || []).filter(p => !ids.has(p.id)));
+            setMatches(people.filter(p => !ids.has(p.id)));
             setActive(0);
           } catch (_) { if (n === seq.current) setMatches([]); }
         }, 200);
@@ -609,10 +617,22 @@
       const [submitting, setSubmitting] = useState(false);
       const [success, setSuccess] = useState(false);
       const [anonymous, setAnonymous] = useState(false);
+      // A name typed but never picked gets no email. Before posting, look it up
+      // and offer close matches ("did you mean"), or let them post without email.
+      const [check, setCheck] = useState(null); // { typed, people } | null
 
-      const handleSubmit = async (e) => {
-        e.preventDefault();
+      const handleSubmit = async (e, skipCheck = false) => {
+        if (e) e.preventDefault();
         if (!recipientName || (!anonymous && !form.nominator) || !form.value || !form.description) return;
+        const typed = form.recipient.trim();
+        if (typed && !skipCheck) {
+          let people = [];
+          try { people = await findPeople(typed); } catch (_) {}
+          const ids = new Set(picked.map(p => p.id));
+          setCheck({ typed, people: people.filter(p => !ids.has(p.id)).slice(0, 5) });
+          return;
+        }
+        setCheck(null);
         setSubmitting(true);
         // Route through the submit function rather than inserting directly —
         // it holds the service-role key, so the table stays closed to the browser.
@@ -656,7 +676,29 @@
             <div className="form-group">
               <label className="form-label">Who are you recognizing?</label>
               <RecipientPicker picked={picked} setPicked={setPicked}
-                text={form.recipient} setText={t => setForm(f => ({...f, recipient: t}))} />
+                text={form.recipient} setText={t => { setCheck(null); setForm(f => ({...f, recipient: t})); }} />
+              {check && (
+                <div className="name-check">
+                  {check.people.length > 0 ? (
+                    <>
+                      <div><strong>"{check.typed}"</strong> isn't picked from the staff list, so they won't get an email. Did you mean:</div>
+                      <div className="name-check-options">
+                        {check.people.map(p => (
+                          <button type="button" key={p.id} className="btn btn-secondary"
+                            onClick={() => { setPicked([...picked, { id: p.id, name: p.name }]); setForm(f => ({...f, recipient: ''})); setCheck(null); }}>
+                            {p.name}{p.site ? ' · ' + p.site : ''}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div>We couldn't find <strong>"{check.typed}"</strong> on the staff list, so they won't get an email. Check the spelling, or post it as typed.</div>
+                  )}
+                  <button type="button" className="name-check-skip" onClick={() => handleSubmit(null, true)}>
+                    Post without emailing "{check.typed}"
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="form-group">
