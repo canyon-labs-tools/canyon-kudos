@@ -1151,8 +1151,8 @@
         );
       }
 
-      const TABS = ['overview','drawing','settings','print','slides','export'];
-      const TAB_LABELS = { overview: 'Overview', drawing: 'Drawing', settings: 'Settings', print: '🖨️ Print Cards', slides: '📊 Slides', export: '📧 Email / PDF' };
+      const TABS = ['overview','drawing','settings','print','slides','export','check'];
+      const TAB_LABELS = { overview: 'Overview', drawing: 'Drawing', settings: 'Settings', print: '🖨️ Print Cards', slides: '📊 Slides', export: '📧 Email / PDF', check: '✅ System Check' };
 
       return (
         <div className="page-wide">
@@ -1178,6 +1178,7 @@
           {tab === 'print' && <PrintTab sites={sites} />}
           {tab === 'slides' && <SlidesTab />}
           {tab === 'export' && <ExportTab />}
+          {tab === 'check' && <SystemCheckTab />}
         </div>
       );
     }
@@ -2568,6 +2569,85 @@
       img.onerror = () => reject(new Error('logo load failed'));
       img.src = src;
     });
+
+    // Runs a real submission through the submit function in check mode: the
+    // entry is saved hidden and deleted at once, and the only email goes to the
+    // one person picked (meant to be the admin running it). Nothing reaches the
+    // board, the TV display or anyone else's inbox.
+    function SystemCheckTab() {
+      const [picked, setPicked] = useState([]);
+      const [text, setText] = useState('');
+      const [running, setRunning] = useState(false);
+      const [result, setResult] = useState(null); // { ok, steps } | { error }
+
+      const run = async () => {
+        if (picked.length !== 1) return;
+        setRunning(true); setResult(null);
+        try {
+          const res = await fetch(SUPABASE_URL + '/functions/v1/kudos-submit', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + SUPABASE_KEY,
+              'apikey': SUPABASE_KEY,
+            },
+            body: JSON.stringify({
+              check: true,
+              password: sessionStorage.getItem('canyon_kudos_pw') || '',
+              recipient_name: picked[0].name,
+              recipient_ids: [picked[0].id],
+              nominator_name: 'Kudos system check',
+              core_value: 'Teamwork',
+              description: 'This is a system check from the Kudos admin page. Nothing was posted to the board.',
+              site_id: null,
+            }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.status === 401) setResult({ error: 'The admin password was not accepted. Sign out and sign in to the admin page again.' });
+          else if (!res.ok) setResult({ error: data.error || ('The check could not run (status ' + res.status + ').') });
+          else setResult(data);
+        } catch (_) {
+          setResult({ error: 'Could not reach the submit function.' });
+        }
+        setRunning(false);
+      };
+
+      return (
+        <div className="card">
+          <h3 style={{ marginBottom: 8 }}>System Check</h3>
+          <p style={{ fontSize: 14, color: 'var(--canyon-muted)', marginBottom: 20 }}>
+            Tests the real submit path without posting a kudos. It saves a hidden test entry,
+            deletes it straight away, and sends one email marked [SYSTEM CHECK] to the person
+            you pick below. Pick yourself.
+          </p>
+          <label className="form-label">Send the test email to</label>
+          <RecipientPicker picked={picked} setPicked={p => setPicked(p.slice(-1))} text={text} setText={setText} />
+          <div style={{ marginTop: 16 }}>
+            <button className="btn btn-primary" disabled={picked.length !== 1 || running} onClick={run}>
+              {running ? 'Running…' : 'Run system check'}
+            </button>
+          </div>
+          {result && result.error && (
+            <p style={{ marginTop: 16, color: '#b91c1c', fontWeight: 600 }}>✗ {result.error}</p>
+          )}
+          {result && result.steps && (
+            <div style={{ marginTop: 16 }}>
+              <p style={{ fontWeight: 700, color: result.ok ? '#15803d' : '#b91c1c', marginBottom: 8 }}>
+                {result.ok ? '✓ Everything works.' : '✗ Something failed — see below.'}
+              </p>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                {result.steps.map(s => (
+                  <li key={s.step} style={{ padding: '6px 0', fontSize: 14 }}>
+                    <span style={{ color: s.ok ? '#15803d' : '#b91c1c', fontWeight: 700 }}>{s.ok ? '✓' : '✗'}</span>{' '}
+                    <strong>{s.step}:</strong> {s.detail}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      );
+    }
 
     function ExportTab() {
       const [preset, setPreset] = useState('lastweek');
