@@ -25,14 +25,23 @@ export function likeTerm(q: string): string {
   return "%" + q.replace(/[\\%_]/g, (c) => "\\" + c) + "%";
 }
 
+// Substring matches first, then close spellings (pg_trgm word similarity), so
+// "Christansen" still finds "Christensen". Used by the type-ahead and by the
+// "did you mean" check when a typed name was never picked.
+export const FUZZY_MIN = 0.4;
+
 export async function searchPeople(q: string): Promise<Person[]> {
   const term = q.trim().slice(0, 100);
   if (term.length < MIN_QUERY) return [];
   const rows = await db()`
     select employee_id as id, full_name as name, site
     from echo.employee
-    where status = 'active' and full_name ilike ${likeTerm(term)}
-    order by (full_name ilike ${term + "%"}) desc, full_name
+    where status = 'active'
+      and (full_name ilike ${likeTerm(term)}
+        or (length(${term}::text) >= 3 and extensions.word_similarity(${term}::text, full_name) >= ${FUZZY_MIN}::real))
+    order by (full_name ilike ${likeTerm(term)}) desc,
+      (full_name ilike ${term + "%"}) desc,
+      extensions.word_similarity(${term}::text, full_name) desc, full_name
     limit ${MAX_RESULTS}`;
   return rows.map((r) => ({ id: r.id, name: r.name, site: r.site ?? null }));
 }

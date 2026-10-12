@@ -9,7 +9,8 @@
 //   GRAPH_TENANT_ID, GRAPH_CLIENT_ID, GRAPH_CLIENT_SECRET — the app registration
 //     allowed to send as the shared mailbox (Mail.Send, scoped to that mailbox)
 //   KUDOS_SENDER      — the shared mailbox address
-//   KUDOS_SITE_URL    — link in the email (defaults to the Azure site)
+//   KUDOS_SITE_URL    — the site; the email links to this week's Bracelet Awards
+//     page on it (defaults to the Azure site)
 //   KUDOS_EMAIL_TEST_TO — if set, every email goes to this address instead of the
 //     nominee (for testing); the subject says who it was meant for
 
@@ -52,6 +53,19 @@ export function firstName(full: string): string {
   return full.trim().split(/\s+/)[0] || full;
 }
 
+// Monday of the current week in the program's time zone, as YYYY-MM-DD. The
+// awards page opens on last week by default, so the link names this week.
+export function awardsWeek(now = new Date()): string {
+  const ymd = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Denver" }).format(now);
+  const d = new Date(ymd + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
+export function awardsUrl(siteUrl: string, now = new Date()): string {
+  return `${siteUrl.replace(/\/+$/, "")}/?view=awards&week=${awardsWeek(now)}`;
+}
+
 export function buildEmail(n: Nominee, r: Recognition, siteUrl: string) {
   const from = r.nominator && r.nominator !== "Anonymous"
     ? escHtml(stripLinks(r.nominator))
@@ -62,7 +76,7 @@ export function buildEmail(n: Nominee, r: Recognition, siteUrl: string) {
 <p>${from} just recognized you for the Canyon Labs core value <strong>${escHtml(r.value)}</strong>.</p>
 <blockquote style="margin:16px 0;padding:12px 16px;border-left:4px solid #272E72;background:#f5f6fb;white-space:pre-wrap">${escHtml(stripLinks(r.description))}</blockquote>
 <p>Your recognition is on the Canyon Kudos board and goes into this week's Bracelet Awards.</p>
-<p><a href="${escHtml(siteUrl)}" style="color:#272E72;font-weight:600">See the Kudos board</a></p>
+<p><a href="${escHtml(awardsUrl(siteUrl))}" style="color:#272E72;font-weight:600">See this week's Bracelet Awards</a></p>
 <p style="color:#6b7280;font-size:13px">Thank you for what you do.</p>
 </div>`;
   return { subject, html };
