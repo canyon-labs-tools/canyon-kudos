@@ -34,7 +34,16 @@ export function escHtml(s: string): string {
 // The description is typed by anyone on a public form, and mail clients turn
 // web addresses into clickable links. Strip them so the kudos mailbox can't be
 // used to deliver a link; the full text is on the board.
-const LINKISH = /\b(?:https?:\/\/|www\.)\S+|\b[\w-]+(?:\.[\w-]+)*\.(?:com|net|org|io|co|us|info|biz|xyz|app|dev|link|ly|me|site|online|top|click)\b\S*/gi;
+const LINKISH = new RegExp(
+  [
+    String.raw`\b[a-z][a-z0-9+.-]*:(?!\s)\S*`, // any scheme: web, mailto, file, …
+    String.raw`\\\\\S+`, // \\host\share paths
+    String.raw`\bwww\.\S+`,
+    String.raw`\b\d{1,3}(?:\.\d{1,3}){3}\b\S*`, // IP addresses
+    String.raw`\b[\w-]+(?:\.[\w-]+)*\.[a-z][a-z-]{1,62}\b\S*`, // any dotted host name, any ending
+  ].join("|"),
+  "gi",
+);
 export function stripLinks(s: string): string {
   return s.replace(LINKISH, "[link removed]");
 }
