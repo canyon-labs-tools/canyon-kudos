@@ -43,6 +43,6 @@ export async function emailsFor(ids: string[]): Promise<{ name: string; email: s
     select full_name as name, work_email as email
     from echo.employee
     where status = 'active' and work_email is not null and work_email <> ''
-      and employee_id = any(${db().array(ids)}::text[])`;
+      and employee_id in ${db()(ids)}`;
   return rows.map((r) => ({ name: r.name, email: r.email }));
 }
