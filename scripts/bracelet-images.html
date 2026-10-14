@@ -1,0 +1,55 @@
+<!doctype html>
+<!-- Draws the five bracelet pictures used in the nominee email (supabase/functions/kudos-submit/bracelets.ts).
+     Serve this folder with canyon-labs-logo.png copied in as logo.png, from a local server that accepts
+     POST /save {name, b64} and writes the file. Run go() in the console, then shrink each PNG to 780x375
+     with a 256-colour palette and paste the base64 into bracelets.ts. --><html><head><meta charset="utf-8"></head><body style="background:#f1f5f9;margin:0">
+<div id="wrap"></div>
+<script>
+const VALUES={"Innovation":["#8b5cf6","💡"],"Integrity":["#0891b2","🛡️"],"Hard Work":["#dc2626","💪"],"Teamwork":["#16a34a","🤝"],"Passion":["#ea580c","🔥"]};
+const W=520,H=250;
+function shade(hex,f){const n=parseInt(hex.slice(1),16);let r=n>>16,g=n>>8&255,b=n&255;
+ const m=c=>Math.max(0,Math.min(255,Math.round(f<0?c*(1+f):c+(255-c)*f)));return`rgb(${m(r)},${m(g)},${m(b)})`;}
+function svgFor(name){const [col,icon]=VALUES[name];const cx=W/2,cy=112,rx=226,ry=80;
+ let defs=`<defs>
+ <linearGradient id="bv" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${shade(col,.55)}"/><stop offset=".45" stop-color="${col}"/><stop offset="1" stop-color="${shade(col,-.45)}"/></linearGradient>
+ <linearGradient id="bn" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7d86c9"/><stop offset=".45" stop-color="#272E72"/><stop offset="1" stop-color="#11153d"/></linearGradient>
+ <linearGradient id="bs" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".5" stop-color="#c9ced8"/><stop offset="1" stop-color="#7c8494"/></linearGradient>
+ <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".55" stop-color="#eef1f6"/><stop offset="1" stop-color="#cfd5df"/></linearGradient>
+ <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f4f6fa"/><stop offset=".5" stop-color="#9aa3b2"/><stop offset="1" stop-color="#e3e7ee"/></linearGradient>
+ <filter id="sh" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="6"/></filter>
+ <filter id="ds" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#0f172a" flood-opacity=".35"/></filter>
+ </defs>`;
+ let back='',front='';
+ const N=40;const pat=['bv','bn','bs','bn'];
+ const beads=[];
+ for(let i=0;i<N;i++){const t=Math.PI/2+ (i/N)*2*Math.PI;const x=cx+rx*Math.cos(t),y=cy+ry*Math.sin(t);
+  const depth=(Math.sin(t)+1)/2; const r=(i%2? 11:13.5)*(0.7+0.4*depth);
+  const g=pat[i%4]; beads.push({x,y,r,g,depth,i,t});}
+ beads.sort((a,b)=>a.depth-b.depth);
+ let cord=`<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="none" stroke="#334155" stroke-width="2" opacity=".35"/>`;
+ let bs='';for(const b of beads){ if(b.depth>0.9) continue; // tile covers front-center
+  const s2=b.r*0.95, rot=(Math.atan2(ry*Math.cos(b.t),-rx*Math.sin(b.t))*180/Math.PI).toFixed(1);
+  bs+=`<g transform="translate(${b.x.toFixed(1)} ${b.y.toFixed(1)}) rotate(${rot})" opacity="${(0.8+0.2*b.depth).toFixed(2)}">`
+   +`<rect x="${-s2}" y="${-s2}" width="${2*s2}" height="${2*s2}" rx="${(s2*0.28).toFixed(1)}" fill="url(#${b.g})" stroke="rgba(15,23,42,.25)" stroke-width=".8"/>`
+   +`<rect x="${-s2*0.62}" y="${-s2*0.7}" width="${s2*1.1}" height="${s2*0.42}" rx="${(s2*0.2).toFixed(1)}" fill="#fff" opacity=".35"/></g>`;}
+ const lw=84,lh=40,txtw=name.length*13+8,tw=lw+txtw+44,th=60,tx=cx-tw/2,ty=cy+ry-th/2+4;
+ const tile=`<g filter="url(#ds)">
+  <rect x="${tx-4}" y="${ty-4}" width="${tw+8}" height="${th+8}" rx="16" fill="url(#rim)"/>
+  <rect x="${tx}" y="${ty}" width="${tw}" height="${th}" rx="12" fill="url(#tile)" stroke="${col}" stroke-width="3"/>
+  <rect x="${tx+8}" y="${ty+8}" width="${tw-16}" height="${th/2-8}" rx="8" fill="#ffffff" opacity=".55"/>
+ </g>
+ <image href="${LOGO}" x="${tx+12}" y="${ty+(th-lh)/2}" width="${lw}" height="${lh}"/>
+ <line x1="${tx+lw+22}" y1="${ty+13}" x2="${tx+lw+22}" y2="${ty+th-13}" stroke="${col}" stroke-width="2" opacity=".5"/>
+ <text x="${tx+lw+22+(txtw+22)/2}" y="${ty+th/2+7}" text-anchor="middle" font-family="Avenir Next, Helvetica Neue, Arial" font-size="20" font-weight="800" fill="${col}">${name.toUpperCase()}</text>`;
+ const shadow=`<ellipse cx="${cx}" cy="${cy+ry+34}" rx="${rx*0.85}" ry="12" fill="#0f172a" opacity=".18" filter="url(#sh)"/>`;
+ return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${defs}${shadow}${cord}${bs}${tile}</svg>`;}
+async function render(name,scale=2){const svg=svgFor(name);
+ const img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);await img.decode();
+ const c=document.createElement('canvas');c.width=W*scale;c.height=H*scale;const x=c.getContext('2d');x.drawImage(img,0,0,c.width,c.height);
+ const b64=c.toDataURL('image/png').split(',')[1];
+ const file='bracelet-'+name.toLowerCase().replace(' ','-')+'.png';
+ await fetch('/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:file,b64})});
+ const el=document.createElement('img');el.src=c.toDataURL();el.style.width=W+'px';document.getElementById('wrap').appendChild(el);return file;}
+let LOGO='';
+window.go=async()=>{const lb=await (await fetch('logo.png')).blob();LOGO=await new Promise(res=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.readAsDataURL(lb);});const r=[];for(const n of Object.keys(VALUES))r.push(await render(n));return r;};
+</script></body></html>

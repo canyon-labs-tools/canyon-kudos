@@ -15,6 +15,7 @@
 //     nominee (for testing); the subject says who it was meant for
 
 import { LOGO_WHITE_PNG_BASE64 } from "./logo.ts";
+import { BRACELET_PNG_BASE64 } from "./bracelets.ts";
 
 export type Nominee = { name: string; email: string };
 export type Recognition = {
@@ -79,6 +80,7 @@ const VALUES: Record<string, { color: string; tint: string; tagline: string }> =
 };
 
 export const LOGO_CID = "canyon-logo";
+export const BRACELET_CID = "canyon-bracelet";
 
 // Table layout and inline styles only: Outlook ignores most modern CSS.
 export function buildEmail(n: Nominee, r: Recognition, siteUrl: string) {
@@ -87,7 +89,7 @@ export function buildEmail(n: Nominee, r: Recognition, siteUrl: string) {
   const first = escHtml(firstName(n.name));
   const value = escHtml(r.value);
   const v = VALUES[r.value] ?? { color: "#272E72", tint: "#eef0fa", tagline: "" };
-  const subject = `${r.subjectPrefix ?? ""}Congratulations, ${firstName(n.name)}! You've been recognized for ${r.value}`;
+  const subject = `${r.subjectPrefix ?? ""}Congratulations, ${firstName(n.name)}! You've earned a ${r.value} bracelet`;
   const font = "'Segoe UI',Arial,sans-serif";
   const head = "'Titillium Web','Segoe UI',Arial,sans-serif";
   const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f1f5f9">
@@ -95,16 +97,18 @@ export function buildEmail(n: Nominee, r: Recognition, siteUrl: string) {
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;font-family:${font};color:#191919">
   <tr><td align="center" style="background:#272E72;padding:28px 24px 22px">
     <img src="cid:${LOGO_CID}" width="150" alt="Canyon Labs" style="display:block;width:150px;height:auto;border:0">
-    <div style="font-family:${font};font-size:11px;letter-spacing:3px;text-transform:uppercase;color:#c7cbe8;padding-top:10px">Canyon Kudos</div>
+    <div style="font-family:${font};font-size:11px;letter-spacing:3px;text-transform:uppercase;color:#c7cbe8;padding-top:10px">Employee Achievement Bracelet Award</div>
   </td></tr>
   <tr><td style="height:5px;line-height:5px;font-size:0;background:#D14124">&nbsp;</td></tr>
   <tr><td align="center" style="padding:36px 32px 8px">
     <div style="font-size:40px;line-height:1">&#127881;</div>
     <h1 style="margin:14px 0 6px;font-family:${head};font-size:30px;line-height:1.2;color:#272E72">Congratulations, ${first}!</h1>
-    <p style="margin:0;font-size:16px;line-height:1.5;color:#475569">${from} recognized you for living one of our core values.</p>
+    <p style="margin:0;font-size:16px;line-height:1.5;color:#475569">${from} recognized you for living one of our core values, and you've earned a bracelet.</p>
   </td></tr>
   <tr><td align="center" style="padding:20px 32px 4px">
-    <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background:${v.tint};border:1.5px solid ${v.color};border-radius:999px;padding:8px 22px;font-family:${head};font-size:16px;font-weight:700;color:${v.color}">${value}</td></tr></table>
+    ${BRACELET_PNG_BASE64[r.value]
+      ? `<img src="cid:${BRACELET_CID}" width="480" alt="Your ${value} bracelet" style="display:block;width:100%;max-width:480px;height:auto;border:0;margin:0 auto">`
+      : `<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background:${v.tint};border:1.5px solid ${v.color};border-radius:999px;padding:8px 22px;font-family:${head};font-size:16px;font-weight:700;color:${v.color}">${value}</td></tr></table>`}
     ${v.tagline ? `<p style="margin:10px 0 0;font-size:13px;font-style:italic;color:#64748b">${escHtml(v.tagline)}</p>` : ""}
   </td></tr>
   <tr><td style="padding:24px 32px 8px">
@@ -116,7 +120,12 @@ export function buildEmail(n: Nominee, r: Recognition, siteUrl: string) {
   </td></tr>
   <tr><td style="padding:20px 32px 4px;font-size:16px;line-height:1.6;color:#191919">
     <p style="margin:0 0 12px"><strong>Thank you, ${first}.</strong> What you do makes a real difference to your team and to everyone at Canyon Labs. People notice, and it matters.</p>
-    <p style="margin:0">Your recognition is now on the Canyon Kudos board and is part of this week's Bracelet Awards.</p>
+    <p style="margin:0">Your recognition is now on the board and is part of this week's Bracelet Awards.</p>
+  </td></tr>
+  <tr><td style="padding:20px 32px 0">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="background:${v.tint};border:1.5px dashed ${v.color};border-radius:10px;padding:16px 20px;font-size:16px;line-height:1.5;color:#191919">
+      <strong style="color:${v.color}">&#127873;&nbsp; Pick up your bracelet.</strong> Come see your site's recognition contact to collect your ${value} bracelet. Wear it with pride.
+    </td></tr></table>
   </td></tr>
   <tr><td align="center" style="padding:26px 32px 34px">
     <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background:#D14124;border-radius:8px">
@@ -125,7 +134,7 @@ export function buildEmail(n: Nominee, r: Recognition, siteUrl: string) {
   </td></tr>
   <tr><td align="center" style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:16px 24px;font-size:12px;line-height:1.5;color:#64748b">
     Canyon Labs &middot; Innovation &middot; Integrity &middot; Hard Work &middot; Teamwork &middot; Passion<br>
-    Sent by Canyon Kudos. Know someone who deserves recognition? Send them a kudos too.
+    Employee Achievement Bracelet Awards. Know someone who deserves a bracelet? Recognize them too.
   </td></tr>
 </table>
 </td></tr></table>
@@ -133,7 +142,24 @@ export function buildEmail(n: Nominee, r: Recognition, siteUrl: string) {
   return { subject, html };
 }
 
-// The logo, attached inline so the header shows without downloading pictures.
+// The logo and the bracelet are attached inline, so they show without
+// downloading pictures (the site's own images sit behind sign-in).
+export function emailAttachments(value: string) {
+  const out = [logoAttachment()];
+  const bracelet = BRACELET_PNG_BASE64[value];
+  if (bracelet) {
+    out.push({
+      "@odata.type": "#microsoft.graph.fileAttachment",
+      name: "bracelet.png",
+      contentType: "image/png",
+      contentId: BRACELET_CID,
+      isInline: true,
+      contentBytes: bracelet,
+    });
+  }
+  return out;
+}
+
 export function logoAttachment() {
   return {
     "@odata.type": "#microsoft.graph.fileAttachment",
@@ -218,7 +244,7 @@ export async function notifyNominees(
               subject: c.testTo ? `[TEST for ${n.name}] ${subject}` : subject,
               body: { contentType: "HTML", content: html },
               toRecipients: [{ emailAddress: { address: to } }],
-              attachments: [logoAttachment()],
+              attachments: emailAttachments(r.value),
             },
             saveToSentItems: true,
           }),
