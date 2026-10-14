@@ -27,12 +27,14 @@ export type Recognition = {
 };
 
 // ONE-TIME COPY, 14 Oct 2026, at Clint's request: Richard Floyd's award (the
-// first one under the new design) also goes to Sarah Ptach and Clint, with a note to Sarah.
+// first one under the new design) is also sent as a separate copy to Sarah Ptach (Clint
+// copied), with a note to her. Richard's own email has no note and no copies.
 // It matches only that one nominee and switches itself off at the end of the
 // day. Remove it in the next change.
 export const ONE_TIME_COPY = {
   nominee: "rfloyd@canyonlabs.com",
-  cc: ["sarah.ptach@canyonlabs.com", "cchristensen@canyonlabs.com"],
+  to: "sarah.ptach@canyonlabs.com",
+  cc: ["cchristensen@canyonlabs.com"],
   replyTo: "cchristensen@canyonlabs.com",
   until: Date.parse("2026-10-15T06:00:00Z"), // end of 14 Oct, Mountain time
   note: "Sarah, I've copied you on Richard's award. This is how we are now letting " +
@@ -252,36 +254,53 @@ export async function notifyNominees(
   }
   let sent = 0;
   for (const n of nominees) {
-    const copy = c.testTo ? null : oneTimeCopy(n.email);
-    const { subject, html } = buildEmail(n, copy ? { ...r, note: copy.note } : r, c.siteUrl);
+    const { subject, html } = buildEmail(n, r, c.siteUrl);
     const to = c.testTo || n.email;
-    try {
-      const res = await f(
-        `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(c.sender)}/sendMail`,
-        {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            message: {
-              subject: c.testTo ? `[TEST for ${n.name}] ${subject}` : subject,
-              body: { contentType: "HTML", content: html },
-              toRecipients: [{ emailAddress: { address: to } }],
-              ...(copy
-                ? {
-                  ccRecipients: copy.cc.map((address) => ({ emailAddress: { address } })),
-                  replyTo: [{ emailAddress: { address: copy.replyTo } }],
-                }
-                : {}),
-              attachments: emailAttachments(r.value),
-            },
-            saveToSentItems: true,
-          }),
-        },
-      );
-      if (res.ok) sent++;
-      else console.error("kudos-submit: email send failed", { status: res.status });
-    } catch (e) {
-      console.error("kudos-submit: email send error", { err: String(e) });
+    const msgs = [{
+      subject: c.testTo ? `[TEST for ${n.name}] ${subject}` : subject,
+      html,
+      to: [to],
+      cc: [] as string[],
+      replyTo: [] as string[],
+    }];
+    // The one-time copy is its own email, so the nominee never sees the note.
+    const copy = c.testTo ? null : oneTimeCopy(n.email);
+    if (copy) {
+      msgs.push({
+        subject: `Copy: ${subject}`,
+        html: buildEmail(n, { ...r, note: copy.note }, c.siteUrl).html,
+        to: [copy.to],
+        cc: copy.cc,
+        replyTo: [copy.replyTo],
+      });
+    }
+    for (const m of msgs) {
+      const addr = (a: string[]) => a.map((address) => ({ emailAddress: { address } }));
+      try {
+        const res = await f(
+          `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(c.sender)}/sendMail`,
+          {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              message: {
+                subject: m.subject,
+                body: { contentType: "HTML", content: m.html },
+                toRecipients: addr(m.to),
+                ...(m.cc.length ? { ccRecipients: addr(m.cc) } : {}),
+                ...(m.replyTo.length ? { replyTo: addr(m.replyTo) } : {}),
+                attachments: emailAttachments(r.value),
+              },
+              saveToSentItems: true,
+            }),
+          },
+        );
+        if (res.ok) {
+          if (m === msgs[0]) sent++;
+        } else console.error("kudos-submit: email send failed", { status: res.status, copy: m !== msgs[0] });
+      } catch (e) {
+        console.error("kudos-submit: email send error", { err: String(e), copy: m !== msgs[0] });
+      }
     }
   }
   return sent;
