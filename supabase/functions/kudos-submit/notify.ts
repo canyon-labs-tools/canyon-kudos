@@ -42,9 +42,14 @@ export const ONE_TIME_COPY = {
     "feedback, positive or negative. — Clint",
 };
 
-export function oneTimeCopy(email: string, now = Date.now()) {
+let oneTimeCopySent = false;
+export function oneTimeCopy(email: string, r: Recognition, now = Date.now()) {
   const c = ONE_TIME_COPY;
-  return email.toLowerCase() === c.nominee && now < c.until ? c : null;
+  const match = !oneTimeCopySent && !r.subjectPrefix && now < c.until &&
+    email.toLowerCase() === c.nominee && r.nominator === "Clint Christensen" &&
+    r.value === "Hard Work";
+  if (match) oneTimeCopySent = true;
+  return match ? c : null;
 }
 
 const DEFAULT_SITE_URL = "https://canyon-labs-kudos.azurewebsites.net";
@@ -264,7 +269,7 @@ export async function notifyNominees(
       replyTo: [] as string[],
     }];
     // The one-time copy is its own email, so the nominee never sees the note.
-    const copy = c.testTo ? null : oneTimeCopy(n.email);
+    const copy = c.testTo ? null : oneTimeCopy(n.email, r);
     if (copy) {
       msgs.push({
         subject: `Copy: ${subject}`,
