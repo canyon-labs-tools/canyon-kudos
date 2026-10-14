@@ -23,34 +23,7 @@ export type Recognition = {
   value: string;
   description: string;
   subjectPrefix?: string; // e.g. "[SYSTEM CHECK] " from the admin system check
-  note?: string; // a short note shown above the award (one-time copy below)
 };
-
-// ONE-TIME COPY, 14 Oct 2026, at Clint's request: Richard Floyd's award (the
-// first one under the new design) is also sent as a separate copy to Sarah Ptach (Clint
-// copied), with a note to her. Richard's own email has no note and no copies.
-// It matches only that one nominee and switches itself off at the end of the
-// day. Remove it in the next change.
-export const ONE_TIME_COPY = {
-  nominee: "rfloyd@canyonlabs.com",
-  to: "sarah.ptach@canyonlabs.com",
-  cc: ["cchristensen@canyonlabs.com"],
-  replyTo: "cchristensen@canyonlabs.com",
-  until: Date.parse("2026-10-15T06:00:00Z"), // end of 14 Oct, Mountain time
-  note: "Sarah, I've copied you on Richard's award. This is how we are now letting " +
-    "employees know they've been recognized and earned a bracelet. I would love your " +
-    "feedback, positive or negative. — Clint",
-};
-
-let oneTimeCopySent = false;
-export function oneTimeCopy(email: string, r: Recognition, now = Date.now()) {
-  const c = ONE_TIME_COPY;
-  const match = !oneTimeCopySent && !r.subjectPrefix && now < c.until &&
-    email.toLowerCase() === c.nominee && r.nominator === "Clint Christensen" &&
-    r.value === "Hard Work";
-  if (match) oneTimeCopySent = true;
-  return match ? c : null;
-}
 
 const DEFAULT_SITE_URL = "https://canyon-labs-kudos.azurewebsites.net";
 
@@ -121,7 +94,6 @@ export function buildEmail(n: Nominee, r: Recognition, siteUrl: string) {
   const head = "'Titillium Web','Segoe UI',Arial,sans-serif";
   const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f1f5f9">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:24px 12px"><tr><td align="center">
-${r.note ? `<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;margin-bottom:14px"><tr><td style="background:#ffffff;border:1px solid #e2e8f0;border-left:5px solid #272E72;border-radius:8px;padding:14px 18px;font-family:${font};font-size:15px;line-height:1.5;color:#191919">${escHtml(r.note)}</td></tr></table>` : ""}
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;font-family:${font};color:#191919">
   <tr><td align="center" style="background:#272E72;padding:28px 24px 22px">
     <img src="cid:${LOGO_CID}" width="150" alt="Canyon Labs" style="display:block;width:150px;height:auto;border:0">
@@ -261,51 +233,28 @@ export async function notifyNominees(
   for (const n of nominees) {
     const { subject, html } = buildEmail(n, r, c.siteUrl);
     const to = c.testTo || n.email;
-    const msgs = [{
-      subject: c.testTo ? `[TEST for ${n.name}] ${subject}` : subject,
-      html,
-      to: [to],
-      cc: [] as string[],
-      replyTo: [] as string[],
-    }];
-    // The one-time copy is its own email, so the nominee never sees the note.
-    const copy = c.testTo ? null : oneTimeCopy(n.email, r);
-    if (copy) {
-      msgs.push({
-        subject: `Copy: ${subject}`,
-        html: buildEmail(n, { ...r, note: copy.note }, c.siteUrl).html,
-        to: [copy.to],
-        cc: copy.cc,
-        replyTo: [copy.replyTo],
-      });
-    }
-    for (const m of msgs) {
-      const addr = (a: string[]) => a.map((address) => ({ emailAddress: { address } }));
-      try {
-        const res = await f(
-          `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(c.sender)}/sendMail`,
-          {
-            method: "POST",
-            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              message: {
-                subject: m.subject,
-                body: { contentType: "HTML", content: m.html },
-                toRecipients: addr(m.to),
-                ...(m.cc.length ? { ccRecipients: addr(m.cc) } : {}),
-                ...(m.replyTo.length ? { replyTo: addr(m.replyTo) } : {}),
-                attachments: emailAttachments(r.value),
-              },
-              saveToSentItems: true,
-            }),
-          },
-        );
-        if (res.ok) {
-          if (m === msgs[0]) sent++;
-        } else console.error("kudos-submit: email send failed", { status: res.status, copy: m !== msgs[0] });
-      } catch (e) {
-        console.error("kudos-submit: email send error", { err: String(e), copy: m !== msgs[0] });
-      }
+    const addr = (a: string[]) => a.map((address) => ({ emailAddress: { address } }));
+    try {
+      const res = await f(
+        `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(c.sender)}/sendMail`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: {
+              subject: c.testTo ? `[TEST for ${n.name}] ${subject}` : subject,
+              body: { contentType: "HTML", content: html },
+              toRecipients: addr([to]),
+              attachments: emailAttachments(r.value),
+            },
+            saveToSentItems: true,
+          }),
+        },
+      );
+      if (res.ok) sent++;
+      else console.error("kudos-submit: email send failed", { status: res.status });
+    } catch (e) {
+      console.error("kudos-submit: email send error", { err: String(e) });
     }
   }
   return sent;
