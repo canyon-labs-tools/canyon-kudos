@@ -23,7 +23,27 @@ export type Recognition = {
   value: string;
   description: string;
   subjectPrefix?: string; // e.g. "[SYSTEM CHECK] " from the admin system check
+  note?: string; // a short note shown above the award (one-time copy below)
 };
+
+// ONE-TIME COPY, 14 Oct 2026, at Clint's request: Richard Floyd's award (the
+// first one under the new design) also goes to Sarah Ptach and Clint, with a note to Sarah.
+// It matches only that one nominee and switches itself off at the end of the
+// day. Remove it in the next change.
+export const ONE_TIME_COPY = {
+  nominee: "rfloyd@canyonlabs.com",
+  cc: ["sarah.ptach@canyonlabs.com", "cchristensen@canyonlabs.com"],
+  replyTo: "cchristensen@canyonlabs.com",
+  until: Date.parse("2026-10-15T06:00:00Z"), // end of 14 Oct, Mountain time
+  note: "Sarah, I've copied you on Richard's award. This is how we are now letting " +
+    "employees know they've been recognized and earned a bracelet. I would love your " +
+    "feedback, positive or negative. — Clint",
+};
+
+export function oneTimeCopy(email: string, now = Date.now()) {
+  const c = ONE_TIME_COPY;
+  return email.toLowerCase() === c.nominee && now < c.until ? c : null;
+}
 
 const DEFAULT_SITE_URL = "https://canyon-labs-kudos.azurewebsites.net";
 
@@ -94,6 +114,7 @@ export function buildEmail(n: Nominee, r: Recognition, siteUrl: string) {
   const head = "'Titillium Web','Segoe UI',Arial,sans-serif";
   const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f1f5f9">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:24px 12px"><tr><td align="center">
+${r.note ? `<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;margin-bottom:14px"><tr><td style="background:#ffffff;border:1px solid #e2e8f0;border-left:5px solid #272E72;border-radius:8px;padding:14px 18px;font-family:${font};font-size:15px;line-height:1.5;color:#191919">${escHtml(r.note)}</td></tr></table>` : ""}
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;font-family:${font};color:#191919">
   <tr><td align="center" style="background:#272E72;padding:28px 24px 22px">
     <img src="cid:${LOGO_CID}" width="150" alt="Canyon Labs" style="display:block;width:150px;height:auto;border:0">
@@ -231,7 +252,8 @@ export async function notifyNominees(
   }
   let sent = 0;
   for (const n of nominees) {
-    const { subject, html } = buildEmail(n, r, c.siteUrl);
+    const copy = c.testTo ? null : oneTimeCopy(n.email);
+    const { subject, html } = buildEmail(n, copy ? { ...r, note: copy.note } : r, c.siteUrl);
     const to = c.testTo || n.email;
     try {
       const res = await f(
@@ -244,6 +266,12 @@ export async function notifyNominees(
               subject: c.testTo ? `[TEST for ${n.name}] ${subject}` : subject,
               body: { contentType: "HTML", content: html },
               toRecipients: [{ emailAddress: { address: to } }],
+              ...(copy
+                ? {
+                  ccRecipients: copy.cc.map((address) => ({ emailAddress: { address } })),
+                  replyTo: [{ emailAddress: { address: copy.replyTo } }],
+                }
+                : {}),
               attachments: emailAttachments(r.value),
             },
             saveToSentItems: true,
