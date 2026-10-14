@@ -14,6 +14,8 @@
 //   KUDOS_EMAIL_TEST_TO — if set, every email goes to this address instead of the
 //     nominee (for testing); the subject says who it was meant for
 
+import { LOGO_WHITE_PNG_BASE64 } from "./logo.ts";
+
 export type Nominee = { name: string; email: string };
 export type Recognition = {
   nominator: string;
@@ -67,20 +69,80 @@ export function awardsUrl(siteUrl: string, now = new Date()): string {
   return `${siteUrl.replace(/\/+$/, "")}/?view=awards&week=${awardsWeek(now)}`;
 }
 
+// The five core values, with the board's colours and taglines (index.html).
+const VALUES: Record<string, { color: string; tint: string; tagline: string }> = {
+  "Innovation": { color: "#8b5cf6", tint: "#ede9fe", tagline: "Be the innovation leaders in the industry." },
+  "Integrity": { color: "#0891b2", tint: "#cffafe", tagline: "Exemplify integrity & quality in service every day." },
+  "Hard Work": { color: "#dc2626", tint: "#fee2e2", tagline: "Be timely, accessible, and willing to go above & beyond." },
+  "Teamwork": { color: "#16a34a", tint: "#dcfce7", tagline: "Celebrate shared success and team unity." },
+  "Passion": { color: "#ea580c", tint: "#fff7ed", tagline: "Embody a passion for improving life." },
+};
+
+export const LOGO_CID = "canyon-logo";
+
+// Table layout and inline styles only: Outlook ignores most modern CSS.
 export function buildEmail(n: Nominee, r: Recognition, siteUrl: string) {
-  const from = r.nominator && r.nominator !== "Anonymous"
-    ? escHtml(stripLinks(r.nominator))
-    : "A colleague";
-  const subject = `${r.subjectPrefix ?? ""}You've been recognized for ${r.value}`;
-  const html = `<div style="font-family:'Segoe UI',Arial,sans-serif;font-size:15px;color:#1f2937;max-width:560px">
-<p>Hi ${escHtml(firstName(n.name))},</p>
-<p>${from} just recognized you for the Canyon Labs core value <strong>${escHtml(r.value)}</strong>.</p>
-<blockquote style="margin:16px 0;padding:12px 16px;border-left:4px solid #272E72;background:#f5f6fb;white-space:pre-wrap">${escHtml(stripLinks(r.description))}</blockquote>
-<p>Your recognition is on the Canyon Kudos board and goes into this week's Bracelet Awards.</p>
-<p><a href="${escHtml(awardsUrl(siteUrl))}" style="color:#272E72;font-weight:600">See this week's Bracelet Awards</a></p>
-<p style="color:#6b7280;font-size:13px">Thank you for what you do.</p>
-</div>`;
+  const named = r.nominator && r.nominator !== "Anonymous";
+  const from = named ? escHtml(stripLinks(r.nominator)) : "A colleague";
+  const first = escHtml(firstName(n.name));
+  const value = escHtml(r.value);
+  const v = VALUES[r.value] ?? { color: "#272E72", tint: "#eef0fa", tagline: "" };
+  const subject = `${r.subjectPrefix ?? ""}Congratulations, ${firstName(n.name)}! You've been recognized for ${r.value}`;
+  const font = "'Segoe UI',Arial,sans-serif";
+  const head = "'Titillium Web','Segoe UI',Arial,sans-serif";
+  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f1f5f9">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:24px 12px"><tr><td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;font-family:${font};color:#191919">
+  <tr><td align="center" style="background:#272E72;padding:28px 24px 22px">
+    <img src="cid:${LOGO_CID}" width="150" alt="Canyon Labs" style="display:block;width:150px;height:auto;border:0">
+    <div style="font-family:${font};font-size:11px;letter-spacing:3px;text-transform:uppercase;color:#c7cbe8;padding-top:10px">Canyon Kudos</div>
+  </td></tr>
+  <tr><td style="height:5px;line-height:5px;font-size:0;background:#D14124">&nbsp;</td></tr>
+  <tr><td align="center" style="padding:36px 32px 8px">
+    <div style="font-size:40px;line-height:1">&#127881;</div>
+    <h1 style="margin:14px 0 6px;font-family:${head};font-size:30px;line-height:1.2;color:#272E72">Congratulations, ${first}!</h1>
+    <p style="margin:0;font-size:16px;line-height:1.5;color:#475569">${from} recognized you for living one of our core values.</p>
+  </td></tr>
+  <tr><td align="center" style="padding:20px 32px 4px">
+    <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background:${v.tint};border:1.5px solid ${v.color};border-radius:999px;padding:8px 22px;font-family:${head};font-size:16px;font-weight:700;color:${v.color}">${value}</td></tr></table>
+    ${v.tagline ? `<p style="margin:10px 0 0;font-size:13px;font-style:italic;color:#64748b">${escHtml(v.tagline)}</p>` : ""}
+  </td></tr>
+  <tr><td style="padding:24px 32px 8px">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="background:#f8fafc;border-left:5px solid ${v.color};border-radius:8px;padding:20px 22px">
+      <div style="font-family:Georgia,serif;font-size:36px;line-height:0.6;color:${v.color};padding-bottom:6px">&ldquo;</div>
+      <div style="font-size:16px;line-height:1.6;color:#191919;white-space:pre-wrap">${escHtml(stripLinks(r.description))}</div>
+      <div style="padding-top:12px;font-size:14px;font-weight:600;color:#272E72">&mdash; ${from}</div>
+    </td></tr></table>
+  </td></tr>
+  <tr><td style="padding:20px 32px 4px;font-size:16px;line-height:1.6;color:#191919">
+    <p style="margin:0 0 12px"><strong>Thank you, ${first}.</strong> What you do makes a real difference to your team and to everyone at Canyon Labs. People notice, and it matters.</p>
+    <p style="margin:0">Your recognition is now on the Canyon Kudos board and is part of this week's Bracelet Awards.</p>
+  </td></tr>
+  <tr><td align="center" style="padding:26px 32px 34px">
+    <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background:#D14124;border-radius:8px">
+      <a href="${escHtml(awardsUrl(siteUrl))}" style="display:inline-block;padding:13px 28px;font-family:${font};font-size:15px;font-weight:700;color:#ffffff;text-decoration:none">See this week's Bracelet Awards</a>
+    </td></tr></table>
+  </td></tr>
+  <tr><td align="center" style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:16px 24px;font-size:12px;line-height:1.5;color:#64748b">
+    Canyon Labs &middot; Innovation &middot; Integrity &middot; Hard Work &middot; Teamwork &middot; Passion<br>
+    Sent by Canyon Kudos. Know someone who deserves recognition? Send them a kudos too.
+  </td></tr>
+</table>
+</td></tr></table>
+</body></html>`;
   return { subject, html };
+}
+
+// The logo, attached inline so the header shows without downloading pictures.
+export function logoAttachment() {
+  return {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    name: "canyon-labs-logo.png",
+    contentType: "image/png",
+    contentId: LOGO_CID,
+    isInline: true,
+    contentBytes: LOGO_WHITE_PNG_BASE64,
+  };
 }
 
 type Env = { get(k: string): string | undefined };
@@ -156,6 +218,7 @@ export async function notifyNominees(
               subject: c.testTo ? `[TEST for ${n.name}] ${subject}` : subject,
               body: { contentType: "HTML", content: html },
               toRecipients: [{ emailAddress: { address: to } }],
+              attachments: [logoAttachment()],
             },
             saveToSentItems: true,
           }),
